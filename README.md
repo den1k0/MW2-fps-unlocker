@@ -1,5 +1,7 @@
 ## Usage — the easy way (single EXE)
 
+### Download `MW2Unlocker.exe` & `unlocker.ini`
+
 Start MW2, then run:
 
 ```
