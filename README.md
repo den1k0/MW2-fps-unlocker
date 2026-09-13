@@ -21,8 +21,6 @@ Worth knowing:
 * It waits up to 30 seconds for the game, so you can launch it while MW2 is
   still loading.
 * If the game runs as administrator, run the EXE as administrator too.
-* `iw4x.exe` is still a **32-bit** client, so this x64 DLL cannot load into it —
-  the launcher detects that and tells you instead of failing silently.
 * If the DLL is already injected it says so. Re-injecting cannot re-run it, so
   either press **F6** twice (off, then on again) or restart the game.
 * **`closeWithGame`** in `[general]` controls what the window does after
