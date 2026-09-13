@@ -965,15 +965,28 @@ registration, and anything beyond it is a reader.
 | executable | cvar | refs to the cached pointer | readers |
 |------------|------|---------------------------|---------|
 | `iw4mp.exe` | `cg_drawFPS` | 1 | **0** |
-| `iw4mp.exe` | `com_maxfps` | 2 | 1 (the frame limiter) |
-| `iw4sp.exe` | `cg_drawFPS` | 7 | **6** |
-| `iw4mp.exe` | `sv_network_fps` | 2 | 1 |
 | `iw4mp.exe` | `cg_drawFPSLabels` | 1 | **0** |
 | `iw4mp.exe` | `cg_drawViewpos` | 1 | **0** |
+| `iw4mp.exe` | `drawLagometer` | 1 | **0** |
+| `iw4mp.exe` | `lagometer` | 1 | **0** |
+| `iw4sp.exe` | `drawLagometer` | - | not in the file at all |
+| `iw4mp.exe` | `com_maxfps` | 2 | 1 (the frame limiter) |
+| `iw4mp.exe` | `sv_network_fps` | 2 | 1 |
+| `iw4mp.exe` | `cg_draw2D` | 4 | 3 (control: the HUD master switch) |
+| `iw4mp.exe` | `cg_drawCrosshair` | 2 | 1 (control) |
+| `iw4sp.exe` | `cg_drawFPS` | 7 | **6** |
 
 `com_maxfps` is the control that makes this trustworthy: exactly one reader, the
 limiter - the one place a frame cap has to be applied - and writing it
-demonstrably works. The method finds readers when they exist.
+demonstrably works. Read HUD cvars behave the same way: `cg_draw2D` (the master
+HUD switch) has three readers and `cg_drawCrosshair` has one, so a cvar that is
+read does show up in this count. The entire debug-HUD block shows zero.
+
+The pattern is consistent enough to name. The 64-bit multiplayer client still
+*registers* these cvars - so they appear in cvar lists, and a config will
+happily save them - but the code that would read them is not in the binary.
+Registering a cvar and using it are two separate acts, and only the second one
+is visible from outside the process.
 
 The multiplayer client registers the whole debug-HUD block and then reads none
 of it. `cg_drawFPS` is a dead cvar there. No console command, no config edit and

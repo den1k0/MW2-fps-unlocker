@@ -67,6 +67,13 @@ const DvarPreset kPresets[] = {
     // only counter multiplayer has, so it is offered even though it is not the
     // figure a frame-rate cap change would show up in.
     {"netfps", "sv_network_fps", false, "0x10,0x20,0x30", "1", "", ""},
+    // drawLagometer: the network lagometer, described in the binary as "Enable
+    // the 'lagometer'". It exists in iw4mp.exe and not at all in iw4sp.exe, and
+    // it has no readers in the multiplayer client - the same signature as the
+    // dead debug-HUD block. Shipped disabled, with the switch left here on
+    // purpose: the write does land, so a live test costs one restart and
+    // settles it where more static analysis would not.
+    {"lagometer", "drawLagometer", false, "0x10,0x20,0x30", "1", "", ""},
 };
 
 const DvarPreset* FindPreset(const std::string& section) {
