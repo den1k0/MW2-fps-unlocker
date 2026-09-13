@@ -1,0 +1,13 @@
+build/
+out/
+*.log
+*.user
+.vs/
+.vscode/
+
+# Local analysis scratch. The reverse-engineering scripts and their output live
+# in the repo root; real sources live in src/, launcher/, injector/, tools/.
+/*.ps1
+/*.txt
+# ...but that txt rule also matches the build file, so put it back.
+!/CMakeLists.txt

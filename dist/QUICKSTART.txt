@@ -1,0 +1,55 @@
+MW2 Unlocker - quick start
+==========================
+
+1. Start the game (single player or multiplayer).
+2. Double-click MW2Unlocker.exe
+
+   - It waits up to 30 seconds for the game, so you can start it while MW2
+     is still loading.
+   - If the game runs as administrator, run this program as administrator too.
+   - The console window is normal; it reports what happened.
+
+3. That is it. Press F6 in game to switch the tweaks on and off.
+
+The window stays open while you play and closes when the game does.
+
+
+Settings
+--------
+unlocker.ini next to this file is the one that gets used. Open it in Notepad:
+
+    [fps]
+    value=0
+
+    [fov]
+    value=90
+
+    value=0    no frame cap at all (fastest)
+    value=250  request a 250 cap - the engine will land near 212
+    value=90   field of view, in degrees
+
+Changes take effect next time you start the game and run this program: the
+settings are read once, when the tweaks are applied.
+
+
+Two things worth knowing
+------------------------
+* The game's own frame limiter is imprecise. It rounds your value down to a
+  whole number of milliseconds and then overshoots a little, so a request of
+  250 gives about 212, and a request of 167 gives about 190. For an exact
+  frame rate, set value=0 here and cap it with your graphics driver (NVIDIA
+  Control Panel -> Max Frame Rate) or RTSS instead.
+
+* Multiplayer is VAC-protected. This is intended for single player, private
+  matches and offline use. Using anything like this on a secured server can
+  get your account banned.
+
+
+If nothing happens
+------------------
+A log is written to:
+
+    %LOCALAPPDATA%\MW2Unlocker\mw2_unlocker.log
+
+It names the settings it found, the addresses it wrote to, and anything it
+could not find.
