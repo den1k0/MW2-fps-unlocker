@@ -48,10 +48,25 @@ const DvarPreset kPresets[] = {
     // cg_fov: a FLOAT. The float at dvar+0x44 reads 80.0 and behaves like the
     // max-FOV clamp, so it is exposed as the optional `max=` key.
     {"fov", "cg_fov", true, "0x10,0x20,0x30", "90", "0x44", "max"},
-    // cg_drawFPS: the engine's own frame counter. Note the capital FPS - the
-    // binary really does use that casing, which is why name lookups are
-    // case-insensitive.
+    // cg_drawFPS: the engine's own frame counter, and an enum rather than a
+    // flag: 0 = Off, 1 = Simple, 2 = SimpleRanges, 3 = Verbose,
+    // 4 = Verbose+Viewpos.
+    //
+    // Single player only. iw4sp.exe reads this cvar from six places; iw4mp.exe
+    // registers it and then never reads it, so in multiplayer the value is
+    // written and ignored and there is no on-screen counter to enable. That is
+    // measured, not assumed - see "cg_drawFPS is dead in the multiplayer
+    // build" in docs/finding-signatures.md. The config ships it disabled.
+    //
+    // The capital FPS is the binary's spelling rather than a typo, which is
+    // why name lookups are case-insensitive.
     {"drawfps", "cg_drawFPS", false, "0x10,0x20,0x30", "1", "", ""},
+    // sv_network_fps: the one debug counter the multiplayer client still reads.
+    // It reports the network/snapshot rate, not the render frame rate - a much
+    // lower number, and the one the old "91" cap was actually about. It is the
+    // only counter multiplayer has, so it is offered even though it is not the
+    // figure a frame-rate cap change would show up in.
+    {"netfps", "sv_network_fps", false, "0x10,0x20,0x30", "1", "", ""},
 };
 
 const DvarPreset* FindPreset(const std::string& section) {
@@ -339,6 +354,25 @@ uintptr_t LocateFeature(const Feature& feature) {
     return match + feature.matchOffset;
 }
 
+// How much of a dvar_t to capture in the log. 0x60 covers the whole structure
+// as measured on this build: the values written by the presets sit at +0x10,
+// +0x20 and +0x30, and the fields after them are what identify the type.
+constexpr size_t kDvarDumpSize = 0x60;
+
+std::string HexBytes(const std::vector<uint8_t>& bytes) {
+    static const char* digits = "0123456789ABCDEF";
+    std::string text;
+    text.reserve(bytes.size() * 3);
+    for (const uint8_t byte : bytes) {
+        if (!text.empty()) {
+            text.push_back(' ');
+        }
+        text.push_back(digits[byte >> 4]);
+        text.push_back(digits[byte & 0x0F]);
+    }
+    return text;
+}
+
 // Locate a live dvar_t.
 //
 // The first field of the structure is a pointer to its own name, so:
@@ -416,6 +450,32 @@ uintptr_t LocateDvar(const Feature& feature) {
     mwlog::Line("features: '%s' dvar located at 0x%llX (rva 0x%llX)", feature.name.c_str(),
                 static_cast<unsigned long long>(dvar),
                 static_cast<unsigned long long>(dvar - base));
+
+    // Log the whole structure, not just where it is.
+    //
+    // The dvar_t layout is undocumented and the value slots are only
+    // identifiable by comparing one struct against another. When a write lands
+    // cleanly and the game still ignores it - which is exactly what happened
+    // with cg_drawFPS - this dump is the difference between a guess and an
+    // answer, and it saves instrumenting and rebuilding again.
+    std::vector<uint8_t> dump(kDvarDumpSize, 0);
+    if (meml::Read(dvar, dump.data(), dump.size())) {
+        mwlog::Line("features: '%s' dvar bytes: %s", feature.name.c_str(),
+                    HexBytes(dump).c_str());
+    }
+
+    // The field after the name is the description. Reading it back confirms the
+    // entry really is the cvar we asked for, and not merely a struct that
+    // happens to start with a pointer to the right string.
+    uintptr_t description = 0;
+    if (meml::Read(dvar + sizeof(uintptr_t), &description, sizeof(description)) &&
+        description != 0) {
+        char text[96] = {};
+        if (meml::Read(description, text, sizeof(text) - 1)) {
+            mwlog::Line("features: '%s' description reads as '%s'", feature.name.c_str(), text);
+        }
+    }
+
     g_dvarCache[cacheKey] = dvar;
     return dvar;
 }
@@ -545,6 +605,32 @@ bool features::Apply() {
     if (!g_patcher.ApplyAll()) {
         g_error = "one or more patches failed to apply";
         // Continue anyway: partial success is still useful for diagnosis.
+    }
+
+    // Read the values back through the cache.
+    //
+    // "The patch applied" and "the engine's value is now what we set" are two
+    // different claims, and only the second one can be true when a feature
+    // writes without error and still changes nothing on screen. The cache makes
+    // this free: no rescanning.
+    for (const Feature& feature : g_features) {
+        if (!IsDvarType(feature.type) || feature.valueOffsets.empty()) {
+            continue;
+        }
+        const uintptr_t dvar = LocateDvar(feature);
+        if (dvar == 0) {
+            continue;
+        }
+        const uintptr_t offset = feature.valueOffsets.front();
+        uint32_t raw = 0;
+        if (!meml::Read(dvar + offset, &raw, sizeof(raw))) {
+            continue;
+        }
+        float asFloat = 0.0f;
+        std::memcpy(&asFloat, &raw, sizeof(asFloat));
+        mwlog::Line("features: '%s' reads back +0x%llX = int %d (float %g)",
+                    feature.name.c_str(), static_cast<unsigned long long>(offset),
+                    static_cast<int>(raw), static_cast<double>(asFloat));
     }
 
     g_applied = true;

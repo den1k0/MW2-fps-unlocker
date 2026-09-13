@@ -17,7 +17,7 @@ at run time, the functionality comes back.
 |---------|-----------------|----------------|
 | **Frame rate cap** | `com_maxfps` — an **integer** that defaults to `85`. `0` means uncapped. | `[fps]` |
 | **Field of view** | `cg_fov` — plus the `80.0` clamp sitting at `dvar+0x44`, if you want a very wide FOV. | `[fov]` |
-| **In-game FPS counter** | `cg_drawFPS` — the engine's own frame counter, so you are not dependent on an external overlay. | `[drawfps]` |
+| **In-game FPS counter** | `cg_drawFPS` — the engine's own frame counter, so you are not dependent on an external overlay. **Single player only**: the multiplayer client registers this cvar and never reads it. | `[drawfps]` |
 
 You only ever type a value:
 
@@ -103,7 +103,15 @@ frames that are *presented* to it; the engine's own counter reports the rate the
 engine *itself* computes, which is the number the game's movement and
 physics code sees. They are not always the same figure, so if you care about
 exact values — and in MW2 the classic movement tricks are tied to specific frame
-rates — read the in-game counter, not the overlay.
+rates — the engine's own counter is the one to read.
+
+**It exists in single player only.** `iw4sp.exe` reads `cg_drawFPS` from six
+places; `iw4mp.exe` registers the cvar and never reads it, so in multiplayer the
+value is written and silently ignored and no counter can be switched on. That is
+measured against both binaries rather than inferred — see
+[`finding-signatures.md`](finding-signatures.md) for the method and the table.
+The only counter multiplayer still has is `sv_network_fps` (`[netfps]`), which
+reports the network rate rather than the frame rate.
 
 There is a second trap: the frame limiter does not hold an arbitrary rate
 exactly. It converts the request into a whole number of milliseconds and then

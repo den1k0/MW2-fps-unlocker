@@ -43,18 +43,28 @@ value=250        frame cap. 0 = no cap at all (fastest)
 value=90         field of view, in degrees
 
 [drawfps]
-value=1          the game's own FPS counter on screen. 0 = off
+value=1          the engine's own FPS counter - SINGLE PLAYER ONLY
+
+[netfps]
+value=1          the network fps counter - multiplayer only, and not your fps
 ```
 
 Put `enabled=0` in a section to drop that tweak entirely.
 
 ### The in-game FPS counter
 
-`[drawfps]` switches on the engine's own counter (`cg_drawFPS`). It is worth
-having because an overlay like Steam's is **not** measuring the same thing: the
+`[drawfps]` switches on the engine's own counter (`cg_drawFPS`), which is worth
+having because an overlay like Steam's is **not** measuring the same thing: an
 overlay counts the frames that reach the GPU, while the game counts the frames
-its own loop produces. If an exact frame rate matters to you, trust the in-game
-counter rather than the overlay.
+its own loop produces.
+
+**It only works in single player.** The multiplayer client registers
+`cg_drawFPS` and then never reads it, so the value is written and silently
+ignored - there is no frame counter to switch on there. That was measured
+against both binaries rather than assumed; the evidence is in
+[`docs/finding-signatures.md`](docs/finding-signatures.md). In multiplayer the
+only counter left is `sv_network_fps` (`[netfps]`), and that is the network
+rate, not your frame rate.
 
 The engine's limiter is also imprecise. It rounds your value down to a whole
 number of milliseconds and then overshoots a little, so `250` lands around 212

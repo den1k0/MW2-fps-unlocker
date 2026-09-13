@@ -890,8 +890,9 @@ model - integer-millisecond period, sub-millisecond overshoot, truncation - come
 from the arithmetic and is not in doubt, but the specific numbers should be
 re-read from `cg_drawFPS` before being relied on for movement work.
 
-To settle it, turn the in-game counter on (`[drawfps] value=1`) and compare the
-two numbers in the same session. That is what the feature was added for.
+To settle it, turn the in-game counter on and compare the two numbers in the
+same session. That was the plan. It is possible in single player and impossible
+in multiplayer - the next section explains why.
 
 ## The cvar is `cg_drawFPS`, not `cg_drawfps`
 
@@ -917,3 +918,91 @@ scans the region in 1 MB chunks, each chunk taken as `chunkSize + needleSize - 1
 bytes so a match straddling a chunk boundary is not missed, and it requires the
 name's terminating null - so `cg_fov` still cannot match `cg_fovScale`. Both
 spellings now work in the config, in both `iw4mp.exe` and `iw4sp.exe`.
+
+---
+
+## cg_drawFPS is dead in the multiplayer build
+
+The counter was implemented, injected and did nothing. The write was not the
+problem - the log proved the whole chain was sound:
+
+```
+features: 'drawfps' cvar name at 0x7FF7755E1028 (rva 0x371028) reads as 'cg_drawFPS'
+features: 'drawfps' dvar located at 0x7FF77B90A6E0 (rva 0x669A6E0)
+patcher: applied 'drawfps+0x10' (4 bytes at 0x7FF77B90A6F0)
+features: 'drawfps' reads back +0x10 = int 1 (float 1.4013e-45)
+```
+
+The cvar was found, the dvar was a real entry in the same 0x60-byte array as
+`com_maxfps` and `cg_fov` (968 and 609 entries away respectively), the value went
+into all three slots, and no `re-applied` line ever appeared - unlike `fov`, the
+engine was not even resetting it. It stayed 1. Nothing drew. Re-enabling it
+before a level load did not change that either, which ruled out the obvious
+"the HUD is built at level load" theory.
+
+So the question became whether the value is read at all. That is answerable from
+the binary, and the answer is no.
+
+### The method
+
+Every cvar is registered by a call that takes the name string and returns a
+`dvar_t*`, which the caller caches in a static:
+
+```
+lea rcx, [cg_drawFPS]          ; the name string
+call Dvar_Register...
+mov [rip+disp32], rax          ; the dvar_t* is cached here
+```
+
+References to such a static are RIP-relative operands, and the target is always
+`(address after the instruction) + disp32`. The instruction length therefore
+does not matter for the arithmetic, so every reference can be found without
+decoding a single opcode. Count them: the `mov` that stores the pointer is the
+registration, and anything beyond it is a reader.
+
+### The result
+
+| executable | cvar | refs to the cached pointer | readers |
+|------------|------|---------------------------|---------|
+| `iw4mp.exe` | `cg_drawFPS` | 1 | **0** |
+| `iw4mp.exe` | `com_maxfps` | 2 | 1 (the frame limiter) |
+| `iw4sp.exe` | `cg_drawFPS` | 7 | **6** |
+| `iw4mp.exe` | `sv_network_fps` | 2 | 1 |
+| `iw4mp.exe` | `cg_drawFPSLabels` | 1 | **0** |
+| `iw4mp.exe` | `cg_drawViewpos` | 1 | **0** |
+
+`com_maxfps` is the control that makes this trustworthy: exactly one reader, the
+limiter - the one place a frame cap has to be applied - and writing it
+demonstrably works. The method finds readers when they exist.
+
+The multiplayer client registers the whole debug-HUD block and then reads none
+of it. `cg_drawFPS` is a dead cvar there. No console command, no config edit and
+no memory write from this tool can make it draw, because the code that would
+read it is not in the binary.
+
+### What the values would have been
+
+The cvar's domain is an enum, readable from the struct: the field after the
+value slots is `{count, const char**}` and it points at a NULL-terminated list of
+names in `.rdata` - `Off`, `Simple`, `SimpleRanges`, `Verbose`,
+`Verbose+Viewpos`. So the counter takes 0-4, not 0/1. It also means the enum
+*data* is present in the multiplayer build even though the code that would use
+it is not, which is exactly what makes this trap hard to spot from outside.
+
+### What this means
+
+* **Multiplayer has no on-screen frame counter.** Not through `cg_drawFPS`, not
+  through `cg_drawFPSLabels`, not through `cg_drawViewpos`. In multiplayer the
+  engine's own frame rate has to be measured from outside the process.
+* **`sv_network_fps` is alive in multiplayer** and is the only counter that can
+  be put on the HUD there - but it reports the network/snapshot rate, not the
+  render frame rate. It sits far lower than your fps, and it is the figure the
+  classic `91` cap was actually about.
+* **Single player is unaffected.** `iw4sp.exe` reads `cg_drawFPS` from six
+  places, so the counter works there. `[drawfps]` ships disabled and is worth
+  enabling only for campaign and Spec Ops.
+
+The general lesson: a registered cvar that nothing reads looks identical from
+outside to a feature that is broken. The check above separates the two, and it
+is the difference between "my offset is wrong" and "this build does not have the
+feature".

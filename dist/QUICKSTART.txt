@@ -25,7 +25,10 @@ unlocker.ini next to this file is the one that gets used. Open it in Notepad:
     value=90         field of view, in degrees
 
     [drawfps]
-    value=1          the game's own FPS counter on screen. 0 = off
+    value=1          the engine's own FPS counter - SINGLE PLAYER ONLY
+
+    [netfps]
+    value=1          the network fps counter - multiplayer, and not your fps
 
 To drop a feature entirely, put enabled=0 in its section.
 
@@ -37,8 +40,12 @@ The counter on screen
 ---------------------
 An FPS figure from the Steam overlay is not the same number as the one the game
 computes for itself - the overlay counts frames that reach the GPU, the game
-counts the frames its own loop produces. If an exact rate matters to you, trust
-the in-game counter ([drawfps] above) rather than the overlay.
+counts the frames its own loop produces.
+
+The engine's own counter is available in SINGLE PLAYER only. The multiplayer
+client registers the cvar and never reads it, so [drawfps] does nothing there
+however you set it. In multiplayer the only counter left is [netfps], which is
+the network rate rather than your frame rate.
 
 
 Two things worth knowing
