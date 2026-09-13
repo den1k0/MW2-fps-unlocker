@@ -8,11 +8,7 @@ YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 
 That is the whole procedure. `MW2Unlocker.exe` is **self-contained** — the
 unlocker DLL and the default config are embedded as resources, so there is one
-file to double-click and no arguments to remember. It will:
-
-1. extract the DLL and config to `%LOCALAPPDATA%\MW2Unlocker\`,
-2. find the running game (`iw4mp.exe`, then `iw4sp.exe`),
-3. inject, then print the config and log paths.
+file to double-click and no arguments to remember. 
 
 Press **F6** in game to toggle the patches on and off.
 
