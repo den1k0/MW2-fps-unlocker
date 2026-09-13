@@ -3,7 +3,7 @@
 Start MW2, then run:
 
 ```
-build\Release\MW2Unlocker.exe
+YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 ```
 
 That is the whole procedure. `MW2Unlocker.exe` is **self-contained** — the
