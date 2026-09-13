@@ -25,7 +25,7 @@ Worth knowing:
   setting is never applied when output is redirected, so scripts don't hang.
   The launcher adds the key to an existing config automatically if an older
   version of the file is missing it.
-* Edit `%LOCALAPPDATA%\MW2Unlocker\unlocker.ini` to change the FOV, the max FPS
+* Edit `unlocker.ini` to change the FOV, the max FPS
   value, or the toggle key. Your edits are kept — the embedded default is only
   written the first time. Delete the file to get the default back.
 
