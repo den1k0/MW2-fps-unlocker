@@ -2,6 +2,7 @@
 
 #include "memory.h"
 
+#include <cstring>
 #include <sstream>
 
 namespace {
@@ -129,6 +130,71 @@ uintptr_t pattern::FindInModule(const char* moduleName, const std::string& signa
     }
 
     return Find(base, size, bytes, mask);
+}
+
+namespace {
+
+struct InsensitiveContext {
+    std::vector<uint8_t> needle; // lowercased, including the terminator
+    uintptr_t result = 0;
+    bool found = false;
+};
+
+bool ScanRegionInsensitive(uintptr_t regionStart, size_t regionSize, void* user) {
+    auto* ctx = static_cast<InsensitiveContext*>(user);
+    const size_t needleSize = ctx->needle.size();
+    if (regionSize < needleSize) {
+        return true;
+    }
+
+    // Work in chunks so a huge region (the 70 MB .data section) never needs a
+    // full-size copy. Chunks overlap by needleSize - 1 so a match straddling a
+    // boundary is still seen.
+    const size_t chunkSize = 1u << 20;
+    std::vector<uint8_t> buffer;
+
+    for (size_t offset = 0; offset + needleSize <= regionSize; offset += chunkSize) {
+        const size_t remaining = regionSize - offset;
+        const size_t take =
+            (chunkSize + needleSize - 1) < remaining ? (chunkSize + needleSize - 1) : remaining;
+
+        buffer.resize(take);
+        std::memcpy(buffer.data(), reinterpret_cast<const void*>(regionStart + offset), take);
+        for (uint8_t& byte : buffer) {
+            if (byte >= 'A' && byte <= 'Z') {
+                byte = static_cast<uint8_t>(byte + ('a' - 'A'));
+            }
+        }
+
+        const size_t last = take - needleSize;
+        for (size_t i = 0; i <= last; ++i) {
+            if (std::memcmp(buffer.data() + i, ctx->needle.data(), needleSize) == 0) {
+                ctx->result = regionStart + offset + i;
+                ctx->found = true;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+uintptr_t pattern::FindInsensitive(uintptr_t start, size_t size, const std::string& name) {
+    if (start == 0 || size == 0 || name.empty()) {
+        return 0;
+    }
+
+    InsensitiveContext ctx;
+    ctx.needle.reserve(name.size() + 1);
+    for (const char character : name) {
+        const auto byte = static_cast<uint8_t>(character);
+        ctx.needle.push_back(byte >= 'A' && byte <= 'Z' ? static_cast<uint8_t>(byte + 32) : byte);
+    }
+    ctx.needle.push_back(0); // require the terminator, so cg_fov cannot match cg_fovScale
+
+    meml::ForEachReadableRegion(start, size, &ScanRegionInsensitive, &ctx);
+    return ctx.found ? ctx.result : 0;
 }
 
 uintptr_t pattern::ResolveRipRelative(uintptr_t instructionAddress, size_t displacementOffset,

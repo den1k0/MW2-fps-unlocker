@@ -826,23 +826,32 @@ frame rate changes the movement maths - you jump further and take less fall
 damage at certain rates. The rates that "work" are exactly those whose frame
 budget is a **whole number of milliseconds**:
 
-| FPS | frame budget |
-|-----|--------------|
-| 125 | 8 ms |
-| 167 | 6 ms |
-| 250 | 4 ms |
-| 333 | 3 ms |
-| 500 | 2 ms |
-| 1000 | 1 ms |
-| **91** | **11 ms** (`1000 / 11`) |
+| request | `1000 / request` | period the engine uses | measured |
+|---------|------------------|------------------------|----------|
+| 125 | 8.000 | 8 ms | ~112 |
+| **167** | 5.988 | **5 ms** (truncated) | ~190 |
+| 250 | 4.000 | 4 ms | ~212 |
+| 333 | 3.003 | 3 ms | ~310 |
+| 500 | 2.000 | 2 ms | not measured |
+| 1000 | 1.000 | 1 ms | not measured |
 
-That last row is the classic multiplayer cap explained: eleven 1 ms ticks
-between network snapshots.
+Read that table against the folk wisdom, because it does not agree with it.
 
-**The catch, and it's a big one.** We measured that the engine's own pacing
-overshoots - request 250, achieve ~212. So it **cannot reliably sit on the very
-values that matter**. For this purpose an imprecise rate is worse than useless,
-because the whole effect depends on hitting the number exactly.
+* **167 is not a clean divisor.** `1000 / 167` is 5.988, the engine truncates to
+  a 5 ms period, and you end up at ~190 - *faster than you asked for*. 167 is a
+  rate you **cannot** reach through `com_maxfps`, however often it is repeated.
+* The same truncation hits the classic **91**: `1000 / 91` is 10.99, which
+  truncates to 10 ms, so asking for 91 does not produce the 11 ms tick the
+  number is supposed to encode. Treat that row as folklore until it is measured
+  with the in-game counter.
+* Only the exact divisors (125 / 250 / 500 / 1000) survive the arithmetic
+  intact, which is why those are the numbers that behave predictably.
+
+**The catch, and it's a big one.** Even the clean divisors drift, because the
+pacing loop overshoots its own period by 0.2-0.9 ms depending on load - request
+250 lands at ~212. The engine **cannot reliably sit on the very values that
+matter**. For this purpose an imprecise rate is worse than useless, because the
+whole effect depends on hitting the number exactly.
 
 So for movement work:
 
@@ -860,3 +869,51 @@ frame, which is precisely what breaks the effect.
 > matches, single player and offline testing, which is what this project was
 > built for. On public or VAC-secured servers it is an unfair advantage and can
 > be reported or actioned. Judge that before using it there.
+
+---
+
+## Correction: those readings came from the Steam overlay
+
+Everything measured in the two sections above used the **Steam overlay's** frame
+counter. That is not necessarily the same number as the one the engine believes
+it is running at:
+
+| Counter | What it actually counts |
+|---------|-------------------------|
+| Steam overlay / RTSS | frames *presented* to the compositor - what reached the GPU |
+| `cg_drawFPS` | the rate the engine's own frame loop computes |
+
+They can legitimately disagree. A presented frame can be dropped or duplicated
+by the swap chain, and an overlay cannot see engine-side pacing at all. So the
+`measured` column above describes a **presented** frame rate. The *shape* of the
+model - integer-millisecond period, sub-millisecond overshoot, truncation - comes
+from the arithmetic and is not in doubt, but the specific numbers should be
+re-read from `cg_drawFPS` before being relied on for movement work.
+
+To settle it, turn the in-game counter on (`[drawfps] value=1`) and compare the
+two numbers in the same session. That is what the feature was added for.
+
+## The cvar is `cg_drawFPS`, not `cg_drawfps`
+
+A case-sensitivity trap that cost real time here:
+
+| searched | result |
+|----------|--------|
+| `cg_drawfps` (as every guide writes it) | **0 hits** |
+| `cg_drawFPS` (as the binary writes it) | **1 hit** |
+| `cg_drawFPSLabels` | present |
+| `cg_drawfpslabels` | 0 hits |
+| `com_maxfps` | present |
+| `com_maxFPS` | 0 hits |
+
+The capitalisation is inconsistent *within the same binary*: `com_maxfps` is
+lowercase, `cg_drawFPS` is not. Since a cvar is located by matching its name's
+exact bytes, a wrong guess does not fail loudly - it silently finds nothing,
+which is exactly how the first attempt at this concluded "0 hits" and moved on
+to the wrong target.
+
+That is what `pattern::FindInsensitive()` is for. It lowercases the needle and
+scans the region in 1 MB chunks, each chunk taken as `chunkSize + needleSize - 1`
+bytes so a match straddling a chunk boundary is not missed, and it requires the
+name's terminating null - so `cg_fov` still cannot match `cg_fovScale`. Both
+spellings now work in the config, in both `iw4mp.exe` and `iw4sp.exe`.

@@ -48,6 +48,10 @@ const DvarPreset kPresets[] = {
     // cg_fov: a FLOAT. The float at dvar+0x44 reads 80.0 and behaves like the
     // max-FOV clamp, so it is exposed as the optional `max=` key.
     {"fov", "cg_fov", true, "0x10,0x20,0x30", "90", "0x44", "max"},
+    // cg_drawFPS: the engine's own frame counter. Note the capital FPS - the
+    // binary really does use that casing, which is why name lookups are
+    // case-insensitive.
+    {"drawfps", "cg_drawFPS", false, "0x10,0x20,0x30", "1", "", ""},
 };
 
 const DvarPreset* FindPreset(const std::string& section) {
@@ -173,28 +177,6 @@ std::string BytesToPattern(const uint8_t* data, size_t size) {
         }
         stream << std::hex << std::uppercase << std::setw(2) << std::setfill('0')
                << static_cast<int>(data[i]);
-    }
-    return stream.str();
-}
-
-// Turn an ASCII string into a byte pattern. Including the terminator means
-// "cg_fov" cannot match inside "cg_fovScale".
-std::string TextToPattern(const std::string& text, bool withTerminator) {
-    std::ostringstream stream;
-    bool first = true;
-    for (const char character : text) {
-        if (!first) {
-            stream << ' ';
-        }
-        first = false;
-        stream << std::hex << std::uppercase << std::setw(2) << std::setfill('0')
-               << static_cast<int>(static_cast<unsigned char>(character));
-    }
-    if (withTerminator) {
-        if (!first) {
-            stream << ' ';
-        }
-        stream << "00";
     }
     return stream.str();
 }
@@ -389,8 +371,10 @@ uintptr_t LocateDvar(const Feature& feature) {
             return cached->second;
         }
 
-        nameAddress =
-            pattern::FindInModule(module.c_str(), TextToPattern(feature.cvarName, true));
+        // Case-insensitive, because cvar capitalisation is inconsistent and
+        // guides disagree with the binary (cg_drawFPS vs cg_drawfps). Getting
+        // the case wrong must not be the reason a feature silently does nothing.
+        nameAddress = pattern::FindInsensitive(base, size, feature.cvarName);
         if (nameAddress == 0) {
             mwlog::Line("features: '%s' could not find the cvar named '%s' in the module",
                         feature.name.c_str(), feature.cvarName.c_str());

@@ -23,6 +23,15 @@ uintptr_t Find(uintptr_t start, size_t size, const std::vector<uint8_t>& bytes,
 uintptr_t FindInModule(const wchar_t* moduleName, const std::string& signature);
 uintptr_t FindInModule(const char* moduleName, const std::string& signature);
 
+// Case-insensitive search for a null-terminated ASCII name inside
+// [start, start + size). Returns the address of the string, or 0.
+//
+// Cvar capitalisation is inconsistent and sources disagree: this build uses
+// "cg_drawFPS", while every guide writes "cg_drawfps". Since a cvar is located
+// by its exact bytes, getting the case wrong would silently break a feature -
+// so name lookups go through here rather than the byte-exact scanner.
+uintptr_t FindInsensitive(uintptr_t start, size_t size, const std::string& name);
+
 // Resolve a RIP-relative disp32 operand to an absolute address, x64 style:
 //     target = instructionAddress + instructionLength + disp32
 // `displacementOffset` is the byte offset of the 4-byte displacement inside the

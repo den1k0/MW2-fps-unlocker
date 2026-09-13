@@ -39,10 +39,16 @@ DWORD WINAPI WorkerThread(LPVOID /*unused*/) {
     const int delayMs = config.GetInt("general", "delayMs", 5000);
     const int toggleKey = config.GetInt("general", "toggleKey", 0x75); // F6
     // Some cvars are re-initialised by the engine after we write them - cg_fov
-    // in particular when a level loads - so by default we keep checking and
-    // re-apply anything the game has reset.
+    // in particular when a level loads or the player respawns - so by default we
+    // keep checking and re-apply anything the game has reset.
+    //
+    // The interval is deliberately short: a reset is visible as the FOV
+    // snapping back to its default until the next check, so this trades a
+    // negligible amount of work (a few 4-byte reads of our own memory) for a
+    // gap short enough not to see. At 2000 ms a respawn was visibly wrong for
+    // two seconds.
     const int keepApplied = config.GetInt("general", "keepApplied", 1);
-    const int keepAliveMs = config.GetInt("general", "keepAliveMs", 2000);
+    const int keepAliveMs = config.GetInt("general", "keepAliveMs", 100);
 
     features::Init(configPath);
 
