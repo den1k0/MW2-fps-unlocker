@@ -38,4 +38,4 @@ Windows Security -> Virus & threat protection -> Protection history
   -> find the detection -> Actions -> Restore
 
 Windows Security -> Virus & threat protection -> Manage settings
-  -> Exclusions -> Add -> Folder -> D:\Games\projects\fps-unlocker
+  -> Exclusions -> Add -> Folder -> 'YOUR FOLDER'
