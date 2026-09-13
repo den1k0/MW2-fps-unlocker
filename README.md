@@ -32,3 +32,10 @@ Worth knowing:
 * Edit `%LOCALAPPDATA%\MW2Unlocker\unlocker.ini` to change the FOV, the max FPS
   value, or the toggle key. Your edits are kept — the embedded default is only
   written the first time. Delete the file to get the default back.
+
+## Windows Defender fix (It might treat this as malware)
+Windows Security -> Virus & threat protection -> Protection history
+  -> find the detection -> Actions -> Restore
+
+Windows Security -> Virus & threat protection -> Manage settings
+  -> Exclusions -> Add -> Folder -> D:\Games\projects\fps-unlocker
