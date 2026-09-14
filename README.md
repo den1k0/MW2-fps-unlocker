@@ -8,10 +8,6 @@ Start MW2, then run:
 YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 ```
 
-That is the whole procedure. `MW2Unlocker.exe` is **self-contained** — the
-unlocker DLL and the default config are embedded as resources, so there is one
-file to double-click and no arguments to remember.
-
 Press **F6** in game to toggle the patches on and off.
 
 Worth knowing:
