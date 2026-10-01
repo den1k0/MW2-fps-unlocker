@@ -14,26 +14,9 @@ sliders of its own, and an **Other Settings** card holding five switches - music
 fullbright, the HUD, the weapon model and the fog - together with the in-game
 hotkey and a box for whether the window closes when the game does.
 
-The two cards with sliders fold away, because their switches each head a stack of
-values that means nothing while the switch is off: tick one and its rows appear and
-the window grows to fit, untick it and they go again. A small triangle beside those
-two switches points right while a card is closed and down once it is open. Change
-what you want, then
-press **Apply && save**: while the game is injected the change lands immediately,
+Change what you want, then press **Apply && save**: while the game is injected the change lands immediately,
 and if it is not running yet the value is saved to `unlocker.ini` and applied when
 the unlocker is injected.
-
-The mouse sensitivity is deliberately **not** in the window. Writing that setting
-was measured not to change the aim, so a slider for it only promised something that
-did not happen. The `[sensitivity]` section is still in `unlocker.ini` if you want
-to try it yourself: it writes the cvar and a line in the game's own settings file,
-
-```
-players\config_mp.cfg        seta sensitivity "3.45"
-```
-
-which the game reads when it starts. The game saves its settings over that file as
-it exits, so the unlocker writes the line again once the game has closed.
 
 Press **F6** in game to toggle the patches on and off - or whatever key the
 window is set to.
