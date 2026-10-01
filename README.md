@@ -8,6 +8,7 @@ Start MW2, then run:
 YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 ```
 
+![alt text][logo]
 [logo]: https://github.com/den1k0/MW2-fps-unlocker/blob/main/preview.jfif "Logo"
 
 A window opens with a slider and a checkbox for the frame cap and for the field of
