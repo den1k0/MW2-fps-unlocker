@@ -34,9 +34,84 @@ bool Patcher::Add(const std::string& name, uintptr_t address,
     return true;
 }
 
+bool Patcher::AddOrUpdate(const std::string& name, uintptr_t address,
+                          const std::vector<uint8_t>& patched,
+                          const std::vector<bool>& mask) {
+    if (address == 0 || patched.empty() || patched.size() != mask.size()) {
+        return false;
+    }
+
+    bool found = false;
+    for (Entry& entry : entries_) {
+        if (entry.address != address || entry.name != name) {
+            continue;
+        }
+
+        // Deliberately not re-capturing `original`: it describes the process
+        // before any of our writes, not before the previous value. Overwriting
+        // it here would make a restore put back our own earlier value instead of
+        // the game's.
+        entry.patched = patched;
+        for (size_t i = 0; i < entry.patched.size() && i < entry.original.size(); ++i) {
+            if (!mask[i]) {
+                entry.patched[i] = entry.original[i];
+            }
+        }
+        entry.active = true;
+        found = true;
+
+        if (applied_) {
+            if (!meml::WriteProtected(entry.address, entry.patched.data(), entry.patched.size())) {
+                mwlog::Line("patcher: failed to update '%s' at 0x%llX", name.c_str(),
+                            static_cast<unsigned long long>(address));
+                return false;
+            }
+            mwlog::Line("patcher: updated '%s' at 0x%llX", name.c_str(),
+                        static_cast<unsigned long long>(address));
+        }
+        break;
+    }
+
+    if (!found) {
+        if (!Add(name, address, patched, mask)) {
+            return false;
+        }
+        // Add() only registers; the write happens on the next ApplyAll, which is
+        // what the initial apply wants.
+        return true;
+    }
+    return true;
+}
+
+bool Patcher::Restore(const std::string& name) {
+    bool found = false;
+    for (Entry& entry : entries_) {
+        if (entry.name != name) {
+            continue;
+        }
+        found = true;
+        entry.active = false;
+
+        if (!applied_ || entry.original.empty()) {
+            continue;
+        }
+        if (meml::WriteProtected(entry.address, entry.original.data(), entry.original.size())) {
+            mwlog::Line("patcher: reverted '%s' at 0x%llX (switched off)", entry.name.c_str(),
+                        static_cast<unsigned long long>(entry.address));
+        } else {
+            mwlog::Line("patcher: failed to revert '%s' at 0x%llX", entry.name.c_str(),
+                        static_cast<unsigned long long>(entry.address));
+        }
+    }
+    return found;
+}
+
 bool Patcher::ApplyAll() {
     bool allOk = true;
     for (Entry& entry : entries_) {
+        if (!entry.active) {
+            continue; // switched off by the caller; leave the original in place
+        }
         if (!meml::WriteProtected(entry.address, entry.patched.data(), entry.patched.size())) {
             mwlog::Line("patcher: failed to apply '%s' at 0x%llX", entry.name.c_str(),
                         static_cast<unsigned long long>(entry.address));
@@ -70,7 +145,7 @@ bool Patcher::ReapplyChanged() {
 
     bool rewroteAnything = false;
     for (Entry& entry : entries_) {
-        if (entry.patched.empty()) {
+        if (!entry.active || entry.patched.empty()) {
             continue;
         }
 

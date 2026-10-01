@@ -86,10 +86,17 @@ Both findings are written up with the evidence in
 
 | Section | Keys | Notes |
 |---------|------|-------|
-| `[general]` | `delayMs`, `toggleKey`, `closeWithGame`, `keepApplied`, `keepAliveMs`, `gameExe` | `toggleKey=0x75` is F6. `keepAliveMs` is how often the watchdog re-checks; keep it small, the check is a few 4-byte reads. `0` disables it. |
-| `[fps]` | `enabled`, `value` | `com_maxfps`. `0` = uncapped, `250` = sensible ceiling, `1000` = effectively uncapped. |
-| `[fov]` | `enabled`, `value`, `max` | `cg_fov` in degrees. Uncomment `max=` to raise the engine's clamp as well. |
-| `[drawfps]` | `enabled`, `value` | `cg_drawFPS`. `0` = off, `1` = on. |
+| `[general]` | `delayMs`, `toggleKey`, `closeWithGame`, `keepApplied`, `keepAliveMs`, `gameExe` | `toggleKey=0x75` is F6, and the window can change it live. `keepAliveMs` is how often the watchdog re-checks; `0` disables it. |
+| `[fps]` | `enabled`, `value` | `com_maxfps`. `0` = uncapped, `250` = a sensible ceiling, `1000` = effectively uncapped. |
+| `[fov]` | `enabled`, `value`, `max` | `cg_fov` in degrees. `max=` raises the engine's own clamp and doubles as its switch: `0` leaves the clamp alone. |
+| `[sensitivity]` | `enabled`, `value` | `sensitivity`, a float, 1.00 to 20.00. Off by default because it changes how the game plays. |
+| `[drawfps]` | `enabled`, `value` | `cg_drawFPS`, an enum: 0 Off, 1 Simple, 2 SimpleRanges, 3 Verbose, 4 Verbose+Viewpos. **Single player only** - see below. |
+| `[netfps]` | `enabled`, `value` | `sv_network_fps`, the only counter multiplayer reads. It is the network rate, not the frame rate. |
+| `[lagometer]` | `enabled`, `value` | `drawLagometer`. Registered in multiplayer and read by nothing, so it does nothing; the switch is kept so that claim can be re-tested. |
+
+The window covers the first four of those. The counters are file-only for now,
+which is why the window reads them without rewriting them: pushing the values
+back must not switch off something the file turned on.
 
 Any section can be replaced by a fully manual one (`type=`, `cvar=`,
 `valueOffsets=`, `signature=`, `patch=`). The tail of `unlocker.ini` documents
@@ -130,10 +137,13 @@ src/memory.*            Module range lookup, safe reads/writes, page iteration
 src/scanner.*           AOB signature parser + scanner + case-insensitive name search
 src/patcher.*           Register patches, apply / restore / toggle / re-apply
 src/config.*            Tiny INI parser
-src/features.*          Feature engine (presets, dvar lookup, float_ptr, bytes)
-src/dllmain.cpp         Entry point, worker thread, hotkey, exported API
+src/features.*          Feature engine (presets, dvar lookup, live updates, float_ptr, bytes)
+src/dllmain.cpp         Entry point, worker thread, hotkey, control window, exported API
+src/ipc.h               The live-channel protocol the launcher and the DLL share
 injector/main.cpp       x64 LoadLibrary injector
-launcher/main.cpp       Self-contained launcher: extracts the embedded DLL + config, injects
+launcher/main.cpp       Launcher plumbing: payload, process lookup, injection, ini editing
+launcher/gui.cpp        The control window: dialog, custom slider, owner-drawn controls
+launcher/app.h          Interface between the window and the plumbing
 docs/finding-signatures.md  The full reverse-engineering write-up
 dist/                   Built, ready-to-run output
 tools/                  Helper scripts used during the investigation
@@ -170,34 +180,147 @@ dist\MW2Unlocker.exe
 
 That is the whole procedure. `MW2Unlocker.exe` is **self-contained** — the
 unlocker DLL and the default config are embedded as resources, so there is one
-file to double-click and no arguments to remember. It will:
+file to double-click and no arguments to remember. On start it:
 
-1. extract the DLL and config to `%LOCALAPPDATA%\MW2Unlocker\`,
-2. find the running game (`iw4mp.exe`, then `iw4sp.exe`),
-3. inject, then print the config and log paths.
+1. extracts the DLL and config to `%LOCALAPPDATA%\MW2Unlocker\`,
+2. opens the control window and looks for the game in the background,
+3. injects as soon as `iw4mp.exe`, `iw4sp.exe` or `iw4x.exe` appears, and says so
+   in the status line.
+
+The window has a slider and a checkbox each for the frame cap, the field of view
+and the mouse sensitivity, and a box for the in-game toggle key (F1-F12, F6 by
+default). **Apply && save** writes `unlocker.ini` and, when the unlocker is
+already injected, pushes the values into the running game - see *The live
+channel* below. Nothing is written while you drag, so the game never sees a
+half-changed state.
+
+Sensitivity is the odd one out among those, in two ways.
+
+It is a float, and the slider works in hundredths (1.00 to 20.00) so an exact
+value can be set - the game's own slider shows no number at all, which is the
+whole reason for offering it here. It is switched off unless asked for, because
+it changes how the game plays rather than how it looks.
+
+And it is **not live**, which is worth explaining because everything else in this
+window is. The one reference to the `sensitivity` dvar in `iw4mp.exe` is the dvar
+system's own hash probe - the code around it is bucket arithmetic (`sub ecx,
+[rax+0x10]`, `and rdx, rax`, a table stride) - so the aiming code never consults
+that dvar at run time. What it reads is the *player profile*: the engine copies
+the setting into the profile when the game starts (hence `viewSensitivity` and
+`profile_setViewSensitivity` in the binary) and the input path uses the profile
+from then on.
+
+That is why `seta sensitivity` in `players\config_mp.cfg` works and a live dvar
+write does nothing. So Apply does both: it pushes the value like any other
+setting, which is harmless and may yet matter to the single-player client, and it
+writes the line into the game's own settings file - quoted exactly the way the
+game writes its own lines, since matching that format is what keeps the parser
+happy:
+
+```
+<game folder>\players\config_mp.cfg      seta sensitivity "3.45"
+```
+
+The file is the part with an effect, and it needs the next launch.
+
+There is a second half to that, learned by watching the file: the game **saves its
+settings over it when it exits**, so a line written during play is undone the
+moment the player quits - which is what makes this look like a feature that does
+nothing. The worker therefore writes the line again after the game has closed,
+re-reading the value from the config rather than from the window. By hand the
+same rule applies: edit the file while the game is closed.
+
+The on-screen counters have no controls yet; they are still set in the file:
+
+```ini
+[drawfps]
+enabled=1
+value=1
+```
+
+The window is drawn by the launcher rather than assembled from stock controls.
+The reason is not decoration: the common controls trackbar **cannot be
+recoloured** - it is painted by the theme - so on a dark window it looks like a
+light grey strip left behind by another program. `gui.cpp` therefore draws its
+own slider and hotkey box, and owner-draws the checkboxes and buttons. The
+palette is the one the game itself is built from: olive greys for the surfaces,
+orange for anything that wants attention, green for anything switched on.
+
+Owner-drawing has one consequence worth knowing, because it caused a bug and a
+half: an owner-drawn button keeps no check state of its own, since
+`BS_OWNERDRAW` *replaces* `BS_AUTOCHECKBOX` rather than adding to it. The check
+states therefore live in the window's state, and `IsDlgButtonChecked` is never
+asked. Tab order, focus, arrows, Enter and Escape still come from the dialog.
 
 Press **F6** in game to toggle every patch on and off at once.
 
 Worth knowing:
 
-* An `unlocker.ini` sitting **next to the EXE** wins over the stored copy and is
-  copied into the work folder on every run. Edit that one. This matters because
-  the working config lives under `%LOCALAPPDATA%`, and edits to a forgotten copy
-  elsewhere would silently do nothing.
-* It waits up to 30 seconds for the game, so you can launch it while MW2 is
-  still loading.
+* An `unlocker.ini` sitting **next to the EXE** wins over the stored copy. The
+  window reads that file when it opens, and writes both it and the working copy,
+  so the two cannot drift apart. This matters because the working config lives
+  under `%LOCALAPPDATA%`, and edits to a forgotten copy would silently do
+  nothing.
+* The game is waited for up to a minute, so starting this before MW2 is fine.
 * If the game runs as administrator, run the EXE as administrator too.
 * `iw4x.exe` is still a **32-bit** client, so this x64 DLL cannot load into it —
   the launcher detects that and says so instead of failing silently.
 * If the DLL is already injected it says so. Re-injecting cannot re-run it, so
   either press **F6** twice (off, then on again) or restart the game.
-* **`closeWithGame`** in `[general]` controls what the window does after
-  injecting: `1` (default) keeps it open while the game runs and closes it with
-  the game; `0` prints the summary and waits for a keypress instead. It is never
-  applied when output is redirected, so scripts don't hang.
-* The F6 toggle covers the counter too, so `[drawfps]` disappears along with the
+* **`closeWithGame`** in `[general]` controls what the window does: `1` (default)
+  closes it when the game exits, `0` leaves it open so values can be changed
+  afterwards.
+* The F6 toggle covers the counters too, so `[drawfps]` disappears along with the
   rest when you toggle the unlocker off. Set `enabled=0` there if you never want
   it.
+* Run it from a shell and it also prints its progress to stdout; started from
+  Explorer there is no console at all, because the window is the interface.
+
+## The live channel
+
+A slider that only takes effect on the next launch is a config editor, not a
+control. The DLL reads its configuration once, at injection, so it needs to be
+told about a new value while the game is running.
+
+Windows already has a mechanism for that which needs no ports, pipes or agreed
+file paths: a window. The DLL creates a hidden top-level window inside the game
+process, the launcher finds it by class name, and the values travel as
+`WM_COPYDATA`:
+
+```
+launcher                                   game process
+  FindWindowW("MW2UnlockerLive")    --->   hidden window, created by the DLL
+  SendMessageTimeout(WM_COPYDATA)   --->   WndProc -> features::ApplyLive(values)
+```
+
+Both binaries include `src/ipc.h`, which defines the window class, the message
+and the value struct - so the two cannot drift apart - and the struct carries a
+protocol version that each side checks before reading it.
+
+`WM_COPYDATA` and not a message of our own, which matters more than it looks:
+messages at or above `WM_USER` are delivered verbatim, so a pointer in `lparam`
+would be a pointer into the *sender's* address space. Following it is an access
+violation inside a window procedure, which the kernel escalates to
+`STATUS_FATAL_USER_CALLBACK_EXCEPTION` and the game dies with it. That is exactly
+what a first version of this did, once, in a live match. `WM_COPYDATA` is
+marshalled by the kernel, so the struct and its payload are copied into the
+receiving process first.
+
+The hotkey rides in the same message even though it is not a cvar: the worker
+thread polls it, and the window procedure runs on that thread, so a plain `int`
+is enough to make a key change take effect without re-injecting.
+
+Two details are what make it safe to drag a slider repeatedly:
+
+* `Patcher::AddOrUpdate` replaces the bytes of an existing patch but keeps the
+  **original** bytes captured the first time. Re-capturing on every update would
+  make a later restore put back our own previous value instead of the game's.
+* Each patch carries an `active` flag. Switching a feature off reverts its bytes
+  and clears the flag, so the watchdog that re-applies values the engine resets
+  (`cg_fov` on a respawn) does not immediately undo that switch.
+
+`SendMessageTimeout` is used rather than `SendMessage`: a busy or hung game must
+not freeze the launcher with it.
 
 ## Usage — the manual way
 

@@ -88,13 +88,32 @@ add_custom_command(
     COMMENT "Embedding mw2_unlocker.dll into the launcher resources"
     VERBATIM)
 
-add_executable(MW2Unlocker launcher/main.cpp "${LAUNCHER_RC}")
-set_target_properties(MW2Unlocker PROPERTIES OUTPUT_NAME "MW2Unlocker")
+add_executable(MW2Unlocker
+    launcher/main.cpp
+    launcher/gui.cpp
+    "${LAUNCHER_RC}")
+
+# A window, not a console: double-clicking must not open a terminal alongside it.
+# stdio still works when a caller supplies handles, so running from a shell or
+# with output redirected still captures the same diagnostics.
+set_target_properties(MW2Unlocker PROPERTIES
+    OUTPUT_NAME "MW2Unlocker"
+    WIN32_EXECUTABLE TRUE)
+
 add_dependencies(MW2Unlocker mw2_unlocker)
 
 # UNICODE/_UNICODE so the Win32 macros (RT_RCDATA, MAKEINTRESOURCE) resolve to
 # their wide variants, matching the explicit ...W calls the launcher uses.
 target_compile_definitions(MW2Unlocker PRIVATE UNICODE _UNICODE)
+
+# src/ipc.h defines the live channel this launcher and the injected DLL talk
+# over. Sharing the header is what stops the two drifting apart: the window
+# class, the message name and the value struct have exactly one definition.
+target_include_directories(MW2Unlocker PRIVATE "${CMAKE_SOURCE_DIR}/src")
+
+# comctl32 for the control window's dialog, dwmapi for the dark caption bar, and
+# uxtheme to ask for the dark variant of the edit controls.
+target_link_libraries(MW2Unlocker PRIVATE comctl32 dwmapi uxtheme)
 
 if(MSVC)
     target_link_options(MW2Unlocker PRIVATE /DYNAMICBASE /HIGHENTROPYVA)

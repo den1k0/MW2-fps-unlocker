@@ -61,6 +61,11 @@ const DvarPreset kPresets[] = {
     // The capital FPS is the binary's spelling rather than a typo, which is
     // why name lookups are case-insensitive.
     {"drawfps", "cg_drawFPS", false, "0x10,0x20,0x30", "1", "", ""},
+    // sensitivity: the mouse sensitivity, and the reason it belongs here is that
+    // the game's own slider carries no numbers, so there is no way to set a
+    // specific value in game. Registered as a float - the call passes its
+    // arguments in XMM registers - so this is a dvar_float.
+    {"sensitivity", "sensitivity", true, "0x10,0x20,0x30", "5", "", ""},
     // sv_network_fps: the one debug counter the multiplayer client still reads.
     // It reports the network/snapshot rate, not the render frame rate - a much
     // lower number, and the one the old "91" cap was actually about. It is the
@@ -487,14 +492,127 @@ uintptr_t LocateDvar(const Feature& feature) {
     return dvar;
 }
 
+// Label for one written value slot. Live updates switch individual features on
+// and off by name, so the label has to be derived identically in both places.
+std::string DvarLabel(const Feature& feature, const char* suffix, uintptr_t offset) {
+    char label[256] = {};
+    std::snprintf(label, sizeof(label), "%s%s+0x%llX", feature.name.c_str(), suffix,
+                  static_cast<unsigned long long>(offset));
+    return std::string(label);
+}
+
 // Add one written value slot to the patcher, labelled so the log is readable.
 bool AddDvarPatch(const Feature& feature, uintptr_t dvar, uintptr_t offset,
                   const std::vector<uint8_t>& bytes, const std::vector<bool>& mask,
                   const char* suffix) {
-    char label[256] = {};
-    std::snprintf(label, sizeof(label), "%s%s+0x%llX", feature.name.c_str(), suffix,
-                  static_cast<unsigned long long>(offset));
-    return g_patcher.Add(label, dvar + offset, bytes, mask);
+    return g_patcher.Add(DvarLabel(feature, suffix, offset), dvar + offset, bytes, mask);
+}
+
+// -----------------------------------------------------------------------------
+// Live updates, driven by the launcher window.
+// -----------------------------------------------------------------------------
+
+// Find the feature built for `section`, or build it from its preset.
+//
+// The window is allowed to switch on something the config never mentioned - the
+// shipped config only documents what it ships - so this falls back to the same
+// preset table the config reader uses instead of requiring a matching section.
+int EnsureFeatureIndex(const std::string& section) {
+    for (size_t i = 0; i < g_features.size(); ++i) {
+        if (g_features[i].name == section) {
+            return static_cast<int>(i);
+        }
+    }
+
+    const DvarPreset* preset = FindPreset(section);
+    if (preset == nullptr) {
+        return -1;
+    }
+
+    Feature feature;
+    feature.name = section;
+    feature.type = preset->isFloat ? "dvar_float" : "dvar_int";
+    feature.cvarName = preset->cvar;
+    feature.valueOffsets = ParseOffsetList(preset->valueOffsets);
+    feature.preset = preset;
+    g_features.push_back(std::move(feature));
+    mwlog::Line("features: '%s' built on demand for a live update", section.c_str());
+    return static_cast<int>(g_features.size() - 1);
+}
+
+// The FOV clamp is a second patch on cg_fov at a different offset, so it needs a
+// feature of its own - and being optional, it may not exist yet either.
+int EnsureClampIndex() {
+    const std::string section = "fov:max";
+    for (size_t i = 0; i < g_features.size(); ++i) {
+        if (g_features[i].name == section) {
+            return static_cast<int>(i);
+        }
+    }
+
+    const DvarPreset* preset = FindPreset("fov");
+    if (preset == nullptr || preset->clampOffset[0] == '\0') {
+        return -1;
+    }
+
+    Feature feature;
+    feature.name = section;
+    feature.type = "dvar_float";
+    feature.cvarName = preset->cvar;
+    feature.valueOffsets = ParseOffsetList(preset->clampOffset);
+    g_features.push_back(std::move(feature));
+    mwlog::Line("features: '%s' built on demand for a live update", section.c_str());
+    return static_cast<int>(g_features.size() - 1);
+}
+
+// Write, or switch off, one feature's value in place.
+bool WriteLiveFeature(Feature& feature, bool enabled, double value) {
+    const uintptr_t dvar = LocateDvar(feature);
+    if (dvar == 0) {
+        mwlog::Line("features: live update for '%s' skipped - the cvar was not located",
+                    feature.name.c_str());
+        return false;
+    }
+
+    // Remember the value even when switching off: switching back on has to
+    // restore the same number without the config being re-read.
+    if (feature.type == "dvar_int") {
+        feature.intValue = static_cast<int>(value);
+        feature.patchBytes = Int32Bytes(feature.intValue);
+    } else {
+        feature.value = static_cast<float>(value);
+        feature.patchBytes = FloatBytes(feature.value);
+    }
+    feature.patchMask.assign(feature.patchBytes.size(), true);
+
+    bool changed = false;
+    for (const uintptr_t offset : feature.valueOffsets) {
+        const std::string label = DvarLabel(feature, "", offset);
+        if (enabled) {
+            changed |= g_patcher.AddOrUpdate(label, dvar + offset, feature.patchBytes,
+                                             feature.patchMask);
+        } else {
+            changed |= g_patcher.Restore(label);
+        }
+    }
+
+    if (feature.type == "dvar_int") {
+        mwlog::Line("features: live '%s' -> %s, value %d", feature.name.c_str(),
+                    enabled ? "on" : "off", feature.intValue);
+    } else {
+        mwlog::Line("features: live '%s' -> %s, value %g", feature.name.c_str(),
+                    enabled ? "on" : "off", static_cast<double>(feature.value));
+    }
+    return changed;
+}
+
+bool SetLive(const std::string& section, bool enabled, double value) {
+    const int index = EnsureFeatureIndex(section);
+    if (index < 0) {
+        mwlog::Line("features: live update for '%s' ignored - no such preset", section.c_str());
+        return false;
+    }
+    return WriteLiveFeature(g_features[static_cast<size_t>(index)], enabled, value);
 }
 
 } // namespace
@@ -671,6 +789,36 @@ void features::KeepApplied() {
         return;
     }
     g_patcher.ReapplyChanged();
+}
+
+bool features::ApplyLive(const ipc::Values& values) {
+    if (values.version != ipc::kProtocolVersion) {
+        mwlog::Line("features: ignoring live values for protocol %u (this build speaks %u)",
+                    static_cast<unsigned>(values.version),
+                    static_cast<unsigned>(ipc::kProtocolVersion));
+        return false;
+    }
+
+    bool changed = false;
+    changed |= SetLive("fps", values.fpsEnabled != 0, static_cast<double>(values.fpsValue));
+    changed |= SetLive("fov", values.fovEnabled != 0, static_cast<double>(values.fovValue));
+
+    const int clampIndex = EnsureClampIndex();
+    if (clampIndex >= 0) {
+        changed |= WriteLiveFeature(g_features[static_cast<size_t>(clampIndex)],
+                                    values.fovClampEnabled != 0,
+                                    static_cast<double>(values.fovClampValue));
+    }
+
+    // The counter is an enum rather than a flag, so the window sends the index.
+    changed |= SetLive("drawfps", values.counterEnabled != 0,
+                       static_cast<double>(values.counterMode));
+    changed |= SetLive("netfps", values.netFpsEnabled != 0, 1.0);
+
+    changed |= SetLive("sensitivity", values.sensitivityEnabled != 0,
+                       static_cast<double>(values.sensitivityValue));
+
+    return changed;
 }
 
 const char* features::LastError() {

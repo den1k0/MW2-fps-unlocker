@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "ipc.h"
+
 // High-level feature engine. Reads the config, resolves every enabled feature
 // by signature and turns it into a patch.
 namespace features {
@@ -26,6 +28,16 @@ bool Applied();
 // watchdog can call this periodically. Cheap: it only reads until something
 // has actually changed.
 void KeepApplied();
+
+// Apply values pushed from the launcher window, without re-reading the config.
+//
+// Features are located once and cached, so this only rewrites the words that
+// changed - which is what allows a slider to be dragged while the game runs.
+// A feature the config never mentioned is built on demand from its preset, so
+// the window can switch on something the file did not ship.
+//
+// Returns true if anything was written or reverted.
+bool ApplyLive(const ipc::Values& values);
 
 // Human-readable description of the last failure (empty on success).
 const char* LastError();

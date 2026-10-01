@@ -4,36 +4,53 @@ MW2 Unlocker - quick start
 1. Start the game (single player or multiplayer).
 2. Double-click MW2Unlocker.exe
 
-   - It waits up to 30 seconds for the game, so you can start it while MW2
-     is still loading.
+   - A window opens and waits for the game (up to a minute), so you can start
+     it while MW2 is still loading. The status line says what it is doing.
    - If the game runs as administrator, run this program as administrator too.
-   - The console window is normal; it reports what happened.
 
-3. That is it. Press F6 in game to switch the tweaks on and off.
+3. Move the sliders, tick or untick the boxes, click the key to change it, then
+   press "Apply && save".
 
-The window stays open while you play and closes when the game does.
+   - If the game is already injected, the change takes effect straight away,
+     the toggle key included.
+   - If it is not, the value is saved and applied when the unlocker is injected.
+   - The key (F6 by default) switches everything off and on again in game.
+
+   After the game has restarted, remember to run this program again: the
+   unlocker has to be injected into the new session.
+
+The window stays open while you play and closes when the game does. Set
+closeWithGame=0 in [general] to keep it open after the game exits instead.
 
 
 Settings
 --------
-unlocker.ini next to this file is the one that gets used. Open it in Notepad:
+The window writes unlocker.ini next to this file, and reads it when it opens.
+Editing that file in Notepad is just as valid - same settings, no sliders:
 
     [fps]
     value=250        frame cap. 0 = no cap at all (fastest)
 
     [fov]
     value=90         field of view, in degrees
+    max=179          also raise the engine's own 80-degree clamp
+
+    [sensitivity]
+    enabled=0        mouse sensitivity, 1.00-20.00. Off by default: the game's
+                     own slider shows no number, this one shows two decimals.
+                     Unlike the rest, it applies at the next game start, because
+                     the game reads it into your profile at startup
 
     [drawfps]
-    value=1          the engine's own FPS counter - SINGLE PLAYER ONLY
+    enabled=0        the engine's own FPS counter - SINGLE PLAYER ONLY
 
     [netfps]
-    value=1          the network fps counter - multiplayer, and not your fps
+    enabled=0        the network fps counter - multiplayer, and not your fps
 
-To drop a feature entirely, put enabled=0 in its section.
+    [general] toggleKey=0x75    the in-game key: F1-F12, 0x75 is F6
 
-Changes take effect the next time you start the game and run this program: the
-settings are read once, when the tweaks are applied.
+To drop a feature entirely, put enabled=0 in its section. The two counters have
+no controls in the window yet, so this file is where they are switched on.
 
 
 The counter on screen
