@@ -35,11 +35,40 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
     value=90         field of view, in degrees
     max=179          also raise the engine's own 80-degree clamp
 
+    [music]
+    enabled=0        music off. The soundtrack is streamed audio, so this switches
+                     the stream off. It is kept applied while the game runs - the
+                     game reloads its sound settings, so one write would not stick
+
+    [r_fullbright] enabled=0   draw the world unlit (writes r_fullbright 1)
+    [cg_draw2D]    enabled=0   hide the HUD, crosshair and counters (writes 0)
+    [cg_drawGun]   enabled=0   hide the first-person weapon (writes cg_drawGun 0)
+    [r_fog]        enabled=0   no distance fog (writes 0)
+    [r_filmTweakEnable] enabled=0   the film colour grade ON. It is behind two
+                     gates (r_filmUseTweaks and r_filmTweakEnable) and the game
+                     ships both off, so this writes 1 to each
+
+    [r_filmTweakContrast]     enabled=0  the grade's six parameters, each with a
+    [r_filmTweakBrightness]   enabled=0  slider in the window. The game registers
+    [r_filmTweakDesaturation] enabled=0  them at 1.4, 0, 0.2 and 1.1, 0.9, 0.7
+    [r_filmTweakLightTint]    enabled=0  - the last three are the tints. A tint
+    [r_filmTweakMediumTint]   enabled=0  is a *colour* cvar (red, green and blue),
+    [r_filmTweakDarkTint]     enabled=0  so the same number goes into all three
+                                         components: a grey tint, like the game's
+                                         own
+
+    [cg_gun_x]     enabled=0   where the first-person weapon sits: forward.
+    [cg_gun_y]     enabled=0   right (cg_gun_y) and up (cg_gun_z), in engine
+    [cg_gun_z]     enabled=0   units. One switch and three sliders in the window,
+                               -10.00 to +10.00
+
     [sensitivity]
-    enabled=0        mouse sensitivity, 1.00-20.00. Off by default: the game's
-                     own slider shows no number, this one shows two decimals.
-                     Unlike the rest, it applies at the next game start, because
-                     the game reads it into your profile at startup
+    enabled=0        mouse sensitivity. NOT in the window any more: writing the
+                     value was measured not to change the aim, so the slider was
+                     taken out rather than left promising something that does not
+                     happen. Set it here and it is written to the cvar *and* to a
+                     seta sensitivity "..." line in the game's own settings file,
+                     which the game reads when it starts
 
     [drawfps]
     enabled=0        the engine's own FPS counter - SINGLE PLAYER ONLY
@@ -49,8 +78,20 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
 
     [general] toggleKey=0x75    the in-game key: F1-F12, 0x75 is F6
 
-To drop a feature entirely, put enabled=0 in its section. The two counters have
-no controls in the window yet, so this file is where they are switched on.
+The window groups music, fullbright, the HUD, the weapon model and the fog -
+along with the in-game hotkey and "close with the game" - into one card called
+"Other Settings"; the film tweak has a card of its own with sliders for its six
+parameters, and the viewmodel offsets have a card with three sliders and one switch.
+
+Those last two cards fold away. Their sliders do nothing while their switch is off,
+so the rows are hidden and the window shrinks to fit - tick the switch and they
+appear right below it, untick it and they go again. The switch itself does not
+move, and the little triangle next to it points right while the card is closed and
+down once it is open.
+
+To drop a feature entirely, put enabled=0 in its section. The two counters have no
+controls in the window yet, and neither has the sensitivity, so this file is where
+they are switched on.
 
 
 The counter on screen

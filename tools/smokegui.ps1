@@ -1,13 +1,20 @@
 # Smoke test for the launcher window.
 #
 # Starts the EXE, proves the dialog resource really produced a window, reads the
-# class, id and text of every control back out of it, and optionally clicks
-# "Apply && save" to exercise the whole write path (controls -> values -> both
-# copies of unlocker.ini). Nobody has to look at the screen for any of it.
+# class, id, text, top edge and visibility of every control back out of it, and
+# optionally clicks controls to exercise the rest of the window: "Apply && save"
+# covers the whole write path (controls -> values -> both copies of
+# unlocker.ini), and -Click covers the viewmodel and film tweak switches, which
+# hide their rows and resize the window. Nobody has to look at the screen.
 #
 # Usage:
 #   powershell -NoProfile -File smokegui.ps1 -Exe build\Release\MW2Unlocker.exe
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -WaitSeconds 66 -ClickApply
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -Click 1031,1023
+#
+# The top edges are the interesting part of the listing: the collapsible cards
+# pull everything below them up, so a diff of two runs says whether the layout
+# actually moved.
 
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
@@ -16,7 +23,13 @@ param(
     # also exercises the worker -> window status path.
     [int]$WaitSeconds = 3,
     # Press the Apply button from outside the process and report what happened.
-    [switch]$ClickApply
+    [switch]$ClickApply,
+    # Click these controls (by id, comma separated) the way a user would, in
+    # order, reporting the window's size after each one. A string rather than an
+    # int[] so it can be passed from a cmd prompt as well as from PowerShell:
+    # cmd hands over "1031,1023" and PowerShell's number conversion would read
+    # that as one gigantic id.
+    [string]$Click = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +54,10 @@ public static extern bool IsWindowVisible(System.IntPtr window);
 public static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
 [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
 public static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool GetWindowRect(System.IntPtr window, out RECT rect);
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct RECT { public int left; public int top; public int right; public int bottom; }
 '@
 
 # Control ids, matching launcher/gui.cpp and launcher/generate_rc.cmake.
@@ -72,6 +89,18 @@ function Get-Class([IntPtr]$window) {
     $buffer = New-Object System.Text.StringBuilder 256
     [void][W.U]::GetClassName($window, $buffer, $buffer.Capacity)
     return $buffer.ToString()
+}
+
+function Get-Top([IntPtr]$window) {
+    $rect = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($window, [ref]$rect)
+    return $rect.top
+}
+
+function Get-Size([IntPtr]$window) {
+    $rect = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($window, [ref]$rect)
+    return ('{0}x{1}' -f ($rect.right - $rect.left), ($rect.bottom - $rect.top))
 }
 
 # Children of one window, as objects, so callers can search by id or class.
@@ -139,10 +168,40 @@ Write-Output ""
 Write-Output ("dialog: class='{0}' text='{1}' visible={2}" -f `
     (Get-Class $dialog), (Get-Text $dialog), [W.U]::IsWindowVisible($dialog))
 
+Write-Output ("size:  {0}" -f (Get-Size $dialog))
+
 $children = Get-Children $dialog
 foreach ($child in $children) {
     $shown = if ($child.Text.Length -gt 70) { $child.Text.Substring(0, 67) + '...' } else { $child.Text }
-    Write-Output ("   id {0,-5} {1,-18} '{2}'" -f $child.Id, $child.Class, $shown)
+    $hidden = if ([W.U]::IsWindowVisible($child.Handle)) { '        ' } else { ' (hidden)' }
+    Write-Output ("   id {0,-5} top {1,-5} {2,-18} '{3}'{4}" -f `
+        $child.Id, (Get-Top $child.Handle), $child.Class, $shown, $hidden)
+}
+
+$clickIds = @()
+foreach ($piece in $Click.Split(',', [System.StringSplitOptions]::RemoveEmptyEntries)) {
+    $clickIds += [int]$piece.Trim()
+}
+
+if ($clickIds.Count -gt 0) {
+    Write-Output ""
+    foreach ($id in $clickIds) {
+        $target = (Get-Children $dialog) | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+        if ($target -eq $null) {
+            Write-Output ("FAIL: no control with id {0}" -f $id)
+            continue
+        }
+        [void][W.U]::SendMessage($target.Handle, $BmClick, [IntPtr]::Zero, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 300
+        Write-Output ("clicked {0} '{1}'  ->  size {2}" -f $id, $target.Text, (Get-Size $dialog))
+    }
+
+    # Where the rows ended up, so the collapse can be checked rather than assumed.
+    Write-Output ""
+    foreach ($child in (Get-Children $dialog)) {
+        $mark = if ([W.U]::IsWindowVisible($child.Handle)) { 'shown' } else { 'hidden' }
+        Write-Output ("   id {0,-5} top {1,-5} {2}" -f $child.Id, (Get-Top $child.Handle), $mark)
+    }
 }
 
 if ($ClickApply) {

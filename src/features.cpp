@@ -45,6 +45,83 @@ const DvarPreset kPresets[] = {
     // com_maxfps: the multiplayer frame cap. An INTEGER defaulting to 85, which
     // is why no float search ever found it.
     {"fps", "com_maxfps", false, "0x10,0x20,0x30", "1000", "", ""},
+    // snd_enableStream: the switch the sound code tests before it starts a
+    // streamed sound. The soundtrack is streamed, so 0 is "no music".
+    //
+    // The guides say to follow it with snd_restart, and in this build that is
+    // pointless: snd_restart is registered in the command table pointing at
+    // 0x80E50, which is `C2 00 00` - a function that returns immediately - and
+    // nothing else refers to the name, so there is no code left that could
+    // react to it. What the docs do not mention is that this cvar is saved and
+    // reloaded with the rest of the sound settings, so a single write does not
+    // survive; the engine's watchdog re-applies it, which is why it is listed
+    // as an ordinary live feature here.
+    {"music", "snd_enableStream", false, "0x10,0x20,0x30", "0", "", ""},
+    // r_fullbright: everything drawn unlit. Read from six places, so the value
+    // lands. The switch turns it *on*, which is the only way anyone wants it.
+    {"r_fullbright", "r_fullbright", false, "0x10,0x20,0x30", "1", "", ""},
+    // cg_draw2D: the whole 2D overlay - the HUD, the crosshair, the on-screen
+    // counters. Read from three places. The switch turns it *off*; leaving it on
+    // is what the game already does, so a checkbox that wrote 1 would do nothing.
+    {"cg_draw2D", "cg_draw2D", false, "0x10,0x20,0x30", "0", "", ""},
+    // cg_drawGun: the first-person view model - "Draw the view model" in the
+    // binary's own words. Read from four places, all in the viewmodel drawing
+    // path. Off again, for the same reason.
+    {"cg_drawGun", "cg_drawGun", false, "0x10,0x20,0x30", "0", "", ""},
+    // r_fog: the distance fog the renderer draws. Read once, from the view
+    // setup, so 0 takes the fog out. Off is the useful direction, so the switch
+    // writes 0.
+    {"r_fog", "r_fog", false, "0x10,0x20,0x30", "0", "", ""},
+    // r_filmUseTweaks: the *outer* gate, and the piece that was missing. The
+    // renderer copies the r_filmTweak* family into its per-frame struct only
+    // when this is on:
+    //
+    //     rva 0x2127B  mov  rax, [r_filmUseTweaks]
+    //     rva 0x21282  cmp  byte ptr [rax + 0x10], 0
+    //     rva 0x21286  je   <skip the copy entirely>
+    //     rva 0x2128C  mov  rax, [r_filmTweakEnable]      ; only reached now
+    //     rva 0x2129E  mov  [rbx + 0x220], cl             ; the flag, per frame
+    //     ...                                             ; then the parameters
+    //
+    // So r_filmTweakEnable on its own is read and then ignored - which is what
+    // was seen in game. This one is written by the same switch.
+    {"r_filmUseTweaks", "r_filmUseTweaks", false, "0x10,0x20,0x30", "1", "", ""},
+    // r_filmTweakEnable: the flag inside that family. Registered with
+    // `xor edx, edx` (default 0, described as "Tweak dev var; enable film color
+    // effects"), so it is turned *on*. The parameters it sits with are
+    // registered at their real values - r_filmTweakContrast at 1.4,
+    // r_filmTweakDesaturation at 0.2 - so opening the two gates is the whole
+    // setting; writing the parameters would be writing what is already there.
+    {"r_filmTweakEnable", "r_filmTweakEnable", false, "0x10,0x20,0x30", "1", "", ""},
+    // cg_gun_x, cg_gun_y, cg_gun_z: where the first-person view model sits, in
+    // engine units - forward, right and up, in the binary's own descriptions.
+    // All three are floats with a default of 0 and no real clamp (the minimum
+    // passed to the registration is -FLT_MAX), read once each where the
+    // viewmodel origin is built. They are values rather than switches, so the
+    // window gives them sliders.
+    // The film tweak's scalars, so the grade can be tuned rather than only
+    // switched. All three are floats whose registered defaults are the values
+    // below - 1.0 for contrast would be "no contrast change", so 1.4 is what the
+    // grade looks like by default - and each is read where the film pass is set
+    // up. The tints and r_filmTweakInvert are deliberately absent: the tints are
+    // colour dvars and invert is a flag, so neither is a slider.
+    {"r_filmTweakContrast", "r_filmTweakContrast", true, "0x10,0x20,0x30", "1.4", "", ""},
+    {"r_filmTweakBrightness", "r_filmTweakBrightness", true, "0x10,0x20,0x30", "0", "", ""},
+    {"r_filmTweakDesaturation", "r_filmTweakDesaturation", true, "0x10,0x20,0x30", "0.2", "", ""},
+    // The three tints, and the odd ones out. Their registration does not go
+    // through the float helper at all: it gathers four floats into a 16-byte
+    // block and passes a pointer to it with type 9, so they are *colour* dvars.
+    // One float would therefore set only the first component and leave the rest
+    // at zero - a pure red tint rather than a grey one - so the offsets list the
+    // first three components of the current value and the same number goes into
+    // all of them. That is the grey level, which is what the single numbers the
+    // guides quote for these cvars are about; the fourth component is untouched.
+    {"r_filmTweakLightTint", "r_filmTweakLightTint", true, "0x10,0x14,0x18", "1.1", "", ""},
+    {"r_filmTweakMediumTint", "r_filmTweakMediumTint", true, "0x10,0x14,0x18", "0.9", "", ""},
+    {"r_filmTweakDarkTint", "r_filmTweakDarkTint", true, "0x10,0x14,0x18", "0.7", "", ""},
+    {"cg_gun_x", "cg_gun_x", true, "0x10,0x20,0x30", "0", "", ""},
+    {"cg_gun_y", "cg_gun_y", true, "0x10,0x20,0x30", "0", "", ""},
+    {"cg_gun_z", "cg_gun_z", true, "0x10,0x20,0x30", "0", "", ""},
     // cg_fov: a FLOAT. The float at dvar+0x44 reads 80.0 and behaves like the
     // max-FOV clamp, so it is exposed as the optional `max=` key.
     {"fov", "cg_fov", true, "0x10,0x20,0x30", "90", "0x44", "max"},
@@ -404,8 +481,8 @@ uintptr_t LocateDvar(const Feature& feature) {
         return 0;
     }
 
-    uintptr_t nameAddress = 0;
     std::string cacheKey;
+    std::vector<uintptr_t> candidates;
 
     if (!feature.cvarName.empty()) {
         cacheKey = moduleKey + "|" + feature.cvarName;
@@ -417,45 +494,62 @@ uintptr_t LocateDvar(const Feature& feature) {
             return cached->second;
         }
 
-        // Case-insensitive, because cvar capitalisation is inconsistent and
-        // guides disagree with the binary (cg_drawFPS vs cg_drawfps). Getting
-        // the case wrong must not be the reason a feature silently does nothing.
-        nameAddress = pattern::FindInsensitive(base, size, feature.cvarName);
-        if (nameAddress == 0) {
+        // Every occurrence, not just the first, and ranked. Case-insensitive
+        // matching is still needed because cvar capitalisation is inconsistent
+        // and guides disagree with the binary (cg_drawFPS vs cg_drawfps), but a
+        // case-insensitive *first* match is not good enough: this build holds
+        // the string "Sensitivity" - a profile field label - and stopping there
+        // reported the cvar "sensitivity" as missing, which is why the setting
+        // silently did nothing even though the game reads it every frame.
+        pattern::FindCandidates(base, size, feature.cvarName, candidates);
+        if (candidates.empty()) {
             mwlog::Line("features: '%s' could not find the cvar named '%s' in the module",
                         feature.name.c_str(), feature.cvarName.c_str());
             return 0;
         }
     } else {
         cacheKey = moduleKey + "|rva:" + std::to_string(feature.nameStringRva);
-        nameAddress = base + feature.nameStringRva;
+        candidates.push_back(base + feature.nameStringRva);
     }
 
-    // Sanity check: read the name back so a wrong match is reported clearly.
-    char probe[64] = {};
-    if (!meml::Read(nameAddress, probe, sizeof(probe) - 1)) {
-        mwlog::Line("features: '%s' name string at 0x%llX is not readable",
-                    feature.name.c_str(), static_cast<unsigned long long>(nameAddress));
-        return 0;
-    }
-    probe[sizeof(probe) - 1] = '\0';
-    mwlog::Line("features: '%s' cvar name at 0x%llX (rva 0x%llX) reads as '%s'",
-                feature.name.c_str(), static_cast<unsigned long long>(nameAddress),
-                static_cast<unsigned long long>(nameAddress - base), probe);
+    // A dvar_t begins with a pointer to its own name, so the name string is what
+    // is searched for and that pointer is what identifies the structure. A
+    // string that nothing points at is a label, not a cvar name - and trying
+    // each candidate against that test is how the two get told apart.
+    uintptr_t dvar = 0;
+    for (const uintptr_t candidate : candidates) {
+        char probe[64] = {};
+        if (!meml::Read(candidate, probe, sizeof(probe) - 1)) {
+            mwlog::Line("features: '%s' name string at 0x%llX is not readable",
+                        feature.name.c_str(), static_cast<unsigned long long>(candidate));
+            continue;
+        }
+        probe[sizeof(probe) - 1] = '\0';
+        mwlog::Line("features: '%s' cvar name candidate at 0x%llX (rva 0x%llX) reads as '%s'",
+                    feature.name.c_str(), static_cast<unsigned long long>(candidate),
+                    static_cast<unsigned long long>(candidate - base), probe);
 
-    uint8_t raw[sizeof(uintptr_t)] = {};
-    std::memcpy(raw, &nameAddress, sizeof(raw));
+        uint8_t raw[sizeof(uintptr_t)] = {};
+        std::memcpy(raw, &candidate, sizeof(raw));
 
-    std::vector<uint8_t> bytes;
-    std::vector<bool> mask;
-    if (!pattern::Parse(BytesToPattern(raw, sizeof(raw)), bytes, mask)) {
-        return 0;
-    }
+        std::vector<uint8_t> bytes;
+        std::vector<bool> mask;
+        if (!pattern::Parse(BytesToPattern(raw, sizeof(raw)), bytes, mask)) {
+            continue;
+        }
 
-    const uintptr_t dvar = pattern::Find(base, size, bytes, mask);
-    if (dvar == 0) {
-        mwlog::Line("features: '%s' no pointer to that name was found in the module",
+        dvar = pattern::Find(base, size, bytes, mask);
+        if (dvar != 0) {
+            break;
+        }
+        mwlog::Line("features: '%s' nothing points at that string, so it is a label, not a cvar name",
                     feature.name.c_str());
+    }
+
+    if (dvar == 0) {
+        mwlog::Line("features: '%s' none of the %d name candidate(s) for '%s' is a dvar",
+                    feature.name.c_str(), static_cast<int>(candidates.size()),
+                    feature.cvarName.c_str());
         return 0;
     }
 
@@ -814,6 +908,47 @@ bool features::ApplyLive(const ipc::Values& values) {
     changed |= SetLive("drawfps", values.counterEnabled != 0,
                        static_cast<double>(values.counterMode));
     changed |= SetLive("netfps", values.netFpsEnabled != 0, 1.0);
+
+    // snd_enableStream. The value written is always 0 - switching this on means
+    // "no streamed audio", so there is nothing to configure - and it is written
+    // on every pass like the others, which is what keeps the game's own sound
+    // settings from quietly turning the music back on.
+    changed |= SetLive("music", values.musicEnabled != 0, 0.0);
+
+    // The other-settings switches, same shape: the value is part of the setting,
+    // not something the window configures, so it is fixed here.
+    changed |= SetLive("r_fullbright", values.fullbrightEnabled != 0, 1.0);
+    changed |= SetLive("cg_draw2D", values.hudEnabled != 0, 0.0);
+    changed |= SetLive("cg_drawGun", values.gunEnabled != 0, 0.0);
+    changed |= SetLive("r_fog", values.fogEnabled != 0, 0.0);
+    // The film tweak needs *both* gates. r_filmUseTweaks decides whether the
+    // renderer copies the family into its frame struct at all, and
+    // r_filmTweakEnable is the flag inside it; opening one without the other
+    // leaves the look untouched, which is exactly how this failed the first time.
+    changed |= SetLive("r_filmUseTweaks", values.filmTweakEnabled != 0, 1.0);
+    changed |= SetLive("r_filmTweakEnable", values.filmTweakEnabled != 0, 1.0);
+
+    // The viewmodel offsets, three values behind one switch. They are one
+    // setting in the window ("move the viewmodel") because moving it in one axis
+    // only is not a thing anyone wants.
+    // The film tweak's scalars ride the same switch as the grade itself: the
+    // gate has to be open for any of them to be read at all.
+    changed |= SetLive("r_filmTweakContrast", values.filmTweakEnabled != 0,
+                       static_cast<double>(values.filmContrast));
+    changed |= SetLive("r_filmTweakBrightness", values.filmTweakEnabled != 0,
+                       static_cast<double>(values.filmBrightness));
+    changed |= SetLive("r_filmTweakDesaturation", values.filmTweakEnabled != 0,
+                       static_cast<double>(values.filmDesaturation));
+    changed |= SetLive("r_filmTweakLightTint", values.filmTweakEnabled != 0,
+                       static_cast<double>(values.filmLightTint));
+    changed |= SetLive("r_filmTweakMediumTint", values.filmTweakEnabled != 0,
+                       static_cast<double>(values.filmMediumTint));
+    changed |= SetLive("r_filmTweakDarkTint", values.filmTweakEnabled != 0,
+                       static_cast<double>(values.filmDarkTint));
+
+    changed |= SetLive("cg_gun_x", values.moveGunEnabled != 0, static_cast<double>(values.gunX));
+    changed |= SetLive("cg_gun_y", values.moveGunEnabled != 0, static_cast<double>(values.gunY));
+    changed |= SetLive("cg_gun_z", values.moveGunEnabled != 0, static_cast<double>(values.gunZ));
 
     changed |= SetLive("sensitivity", values.sensitivityEnabled != 0,
                        static_cast<double>(values.sensitivityValue));

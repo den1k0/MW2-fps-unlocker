@@ -8,14 +8,35 @@
 #   101 = the unlocker DLL        (launcher/main.cpp, kResourceDll)
 #   102 = the default config      (launcher/main.cpp, kResourceIni)
 #   103 = the control dialog      (launcher/gui.cpp,   kDialogMain)
-#  1001..1020 = its controls      (launcher/gui.cpp,   kId*)
+#  1001..1055 = its controls      (launcher/gui.cpp,   kId*)
 #
 # The layout is here rather than built with CreateWindowEx calls because a dialog
 # template gives the right font, tab order and focus handling for free. The
 # colours are not: every control that would draw itself in system colours is
 # owner-drawn in gui.cpp, and the two sliders plus the hotkey box are custom
 # controls of the launcher's own, because the stock trackbar cannot be recoloured
-# at all. The window itself paints the four cards it is divided into.
+# at all. The window itself paints the five cards it is divided into: the frame
+# cap, the field of view, the viewmodel offsets, the film tweak, and one
+# catch-all card for the switches, the hotkey and the close-with-game box.
+#
+# There is no mouse sensitivity card. Writing that cvar was measured not to change
+# the aim in game, so a slider for it only promised something that did not happen;
+# the [sensitivity] section of the config is still there and still applied.
+#
+# The switches in "Other Settings" are not sliders: each is a cvar set to a fixed
+# value (music off, fullbright on, HUD off, weapon model off, fog off), so there
+# is nothing in them to drag. They are laid out in two columns because a single
+# column of them would make the window needlessly tall. The cards that do carry
+# sliders - the viewmodel and the film tweak - use one row per value, with its
+# number beside it so an exact figure can be typed.
+#
+# This template is the *fully expanded* layout: the viewmodel and film tweak
+# cards are laid out with all of their rows showing. The launcher folds the rows
+# of a card away when its switch is off and shrinks the window to match, working
+# from this template's own measurements rather than from a second copy of the
+# numbers - see the collapsible-cards section of gui.cpp. So the row labels carry
+# ids (1046..1055) even though nothing reads their text: -1 would not be findable
+# at run time, and the labels have to vanish along with the row they belong to.
 
 if(NOT OUT OR NOT DLL OR NOT INI)
     message(FATAL_ERROR "generate_rc.cmake requires -DOUT, -DDLL and -DINI")
@@ -41,7 +62,7 @@ file(WRITE "${OUT}"
 101 RCDATA \"${dll_native}\"
 102 RCDATA \"${ini_native}\"
 
-103 DIALOGEX 0, 0, 300, 338
+103 DIALOGEX 0, 0, 300, 556
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION \"MW2 Unlocker\"
 FONT 9, \"MS Shell Dlg\", 400, 0, 0x1
@@ -59,18 +80,52 @@ BEGIN
     CONTROL         \"Change the field of view\", 1004, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 144, 170, 11
     CONTROL         \"Raise the engine's 80-degree clamp\", 1007, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 158, 230, 11
 
-    LTEXT           \"Mouse sensitivity\", 1017, 20, 194, 140, 11
-    EDITTEXT        1020, 234, 192, 46, 14, ES_AUTOHSCROLL
-    CONTROL         \"\", 1019, \"MW2Slider\", WS_TABSTOP, 20, 205, 260, 14
-    CONTROL         \"Change the mouse sensitivity\", 1018, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 224, 200, 11
+    LTEXT           \"Viewmodel\", 1024, 20, 194, 140, 11
+    CONTROL         \"Move the viewmodel\", 1031, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 209, 200, 11
+    LTEXT           \"X\", 1046, 20, 226, 14, 10
+    CONTROL         \"\", 1025, \"MW2Slider\", WS_TABSTOP, 36, 225, 196, 14
+    EDITTEXT        1026, 238, 225, 42, 14, ES_AUTOHSCROLL
+    LTEXT           \"Y\", 1047, 20, 242, 14, 10
+    CONTROL         \"\", 1027, \"MW2Slider\", WS_TABSTOP, 36, 241, 196, 14
+    EDITTEXT        1028, 238, 241, 42, 14, ES_AUTOHSCROLL
+    LTEXT           \"Z\", 1048, 20, 258, 14, 10
+    CONTROL         \"\", 1029, \"MW2Slider\", WS_TABSTOP, 36, 257, 196, 14
+    EDITTEXT        1030, 238, 257, 42, 14, ES_AUTOHSCROLL
 
-    LTEXT           \"Toggle key\", 1015, 20, 257, 120, 11
-    CONTROL         \"\", 1016, \"MW2KeyBox\", WS_TABSTOP, 236, 254, 44, 15
-    LTEXT           \"Click the key to step through F1-F12.\", -1, 20, 270, 200, 9
+    LTEXT           \"Film tweak\", 1017, 20, 289, 140, 11
+    CONTROL         \"Enable the film tweak\", 1023, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 303, 200, 11
+    LTEXT           \"Contrast\", 1049, 20, 319, 58, 10
+    CONTROL         \"\", 1034, \"MW2Slider\", WS_TABSTOP, 80, 317, 152, 14
+    EDITTEXT        1035, 236, 317, 44, 14, ES_AUTOHSCROLL
+    LTEXT           \"Brightness\", 1050, 20, 333, 58, 10
+    CONTROL         \"\", 1036, \"MW2Slider\", WS_TABSTOP, 80, 331, 152, 14
+    EDITTEXT        1037, 236, 331, 44, 14, ES_AUTOHSCROLL
+    LTEXT           \"Desaturation\", 1051, 20, 347, 58, 10
+    CONTROL         \"\", 1038, \"MW2Slider\", WS_TABSTOP, 80, 345, 152, 14
+    EDITTEXT        1039, 236, 345, 44, 14, ES_AUTOHSCROLL
+    LTEXT           \"Light tint\", 1052, 20, 361, 58, 10
+    CONTROL         \"\", 1040, \"MW2Slider\", WS_TABSTOP, 80, 359, 152, 14
+    EDITTEXT        1041, 236, 359, 44, 14, ES_AUTOHSCROLL
+    LTEXT           \"Medium tint\", 1053, 20, 375, 58, 10
+    CONTROL         \"\", 1042, \"MW2Slider\", WS_TABSTOP, 80, 373, 152, 14
+    EDITTEXT        1043, 236, 373, 44, 14, ES_AUTOHSCROLL
+    LTEXT           \"Dark tint\", 1054, 20, 389, 58, 10
+    CONTROL         \"\", 1044, \"MW2Slider\", WS_TABSTOP, 80, 387, 152, 14
+    EDITTEXT        1045, 236, 387, 44, 14, ES_AUTOHSCROLL
 
-    LTEXT           \"\", 1011, 12, 292, 276, 18
+    LTEXT           \"Other Settings\", 1032, 20, 419, 140, 11
+    LTEXT           \"Toggle key\", 1055, 20, 434, 58, 11
+    CONTROL         \"\", 1016, \"MW2KeyBox\", WS_TABSTOP, 80, 431, 44, 15
+    CONTROL         \"Mute the music\", 1018, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 459, 130, 11
+    CONTROL         \"Fullbright world\", 1019, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 473, 130, 11
+    CONTROL         \"Hide the HUD\", 1020, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 487, 130, 11
+    CONTROL         \"Disable the fog\", 1022, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 459, 124, 11
+    CONTROL         \"Hide the weapon model\", 1021, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 473, 124, 11
+    CONTROL         \"Close with the game\", 1033, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 487, 134, 11
 
-    CONTROL         \"Apply & save\", 1012, \"Button\", BS_OWNERDRAW | BS_DEFPUSHBUTTON | WS_TABSTOP, 132, 314, 78, 16
-    CONTROL         \"Close\", IDCANCEL, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 216, 314, 74, 16
+    LTEXT           \"\", 1011, 12, 510, 276, 18
+
+    CONTROL         \"Apply & save\", 1012, \"Button\", BS_OWNERDRAW | BS_DEFPUSHBUTTON | WS_TABSTOP, 132, 532, 78, 16
+    CONTROL         \"Close\", IDCANCEL, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 216, 532, 74, 16
 END
 ")

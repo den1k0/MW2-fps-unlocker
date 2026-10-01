@@ -44,7 +44,13 @@ inline constexpr std::uintptr_t kCopyDataMagic = 0x4D573255; // 'MW2U'
 //
 // 2: added the toggle key.
 // 3: added the mouse sensitivity.
-inline constexpr std::uint32_t kProtocolVersion = 3;
+// 4: added the music switch.
+// 5: added the other-settings switches.
+// 6: added the fog and film-tweak switches.
+// 7: added the viewmodel offsets.
+// 8: added the film tweak parameters.
+// 9: added the film tweak tints.
+inline constexpr std::uint32_t kProtocolVersion = 9;
 
 // Everything the window can change. Mirrors the preset sections in the config.
 struct Values {
@@ -67,6 +73,51 @@ struct Values {
     // window shows two decimals: that is the whole point of offering it here.
     std::int32_t sensitivityEnabled;
     float sensitivityValue;
+
+    // Music off. snd_enableStream is what the sound code tests before it starts
+    // a streamed sound, and the soundtrack is streamed - so holding it at zero
+    // is what keeps the music away. It is a value the game saves and reloads
+    // with its other sound settings, which is why it is re-applied continuously
+    // rather than written once.
+    std::int32_t musicEnabled;
+
+    // The rest of the "Other Settings" group. Each of these is a *switch* rather
+    // than a value: the number written is fixed, and it is chosen so that ticking
+    // the box does what its label says.
+    std::int32_t fullbrightEnabled; // r_fullbright -> 1, everything drawn unlit
+    std::int32_t hudEnabled;        // cg_draw2D    -> 0, no 2D overlay at all
+    std::int32_t gunEnabled;        // cg_drawGun   -> 0, no first-person weapon
+    std::int32_t fogEnabled;        // r_fog        -> 0, no fog
+    std::int32_t filmTweakEnabled;  // r_filmUseTweaks + r_filmTweakEnable -> 1
+
+    // The viewmodel's position, in engine units: forward, right and up. Unlike
+    // the switches above these are values, so the window offers them as sliders
+    // and the numbers travel as they are.
+    //
+    // moveGunEnabled rather than gunEnabled: gunEnabled is already the
+    // "hide the weapon model" switch above, and one struct cannot have two
+    // members with the same name.
+    std::int32_t moveGunEnabled;
+    float gunX;
+    float gunY;
+    float gunZ;
+
+    // The film tweak's three scalars. The tints and r_filmTweakInvert are not
+    // here: the tints are registered as *colour* dvars (four float arguments,
+    // through a different registration helper), so a slider is the wrong control
+    // for them, and invert is a flag rather than a value.
+    float filmContrast;      // r_filmTweakContrast,   1.4 by default
+    float filmBrightness;    // r_filmTweakBrightness, 0 by default
+    float filmDesaturation;  // r_filmTweakDesaturation, 0.2 by default
+
+    // The three tints. These are *colour* dvars - four floats in a 16-byte
+    // block, type 9 - so one number cannot describe one. What the window offers
+    // is the grey level: the same value goes into the first three components
+    // (r, g and b), which is exactly what the single numbers the guides quote for
+    // these cvars achieve. The fourth component is left as the game set it.
+    float filmLightTint;     // r_filmTweakLightTint,  1.1 by default
+    float filmMediumTint;    // r_filmTweakMediumTint, 0.9
+    float filmDarkTint;      // r_filmTweakDarkTint,   0.7
 };
 
 inline Values MakeDefault() {
@@ -88,6 +139,27 @@ inline Values MakeDefault() {
     // is asked for.
     values.sensitivityEnabled = 0;
     values.sensitivityValue = 5.0f;
+
+    // Off as well: these change the game rather than fixing anything, so they are
+    // left alone until they are ticked.
+    values.musicEnabled = 0;
+    values.fullbrightEnabled = 0;
+    values.hudEnabled = 0;
+    values.gunEnabled = 0;
+    values.fogEnabled = 0;
+    values.filmTweakEnabled = 0;
+    values.moveGunEnabled = 0;
+    values.gunX = 0.0f;
+    values.gunY = 0.0f;
+    values.gunZ = 0.0f;
+
+    // The registered defaults, so the sliders start where the game does.
+    values.filmContrast = 1.4f;
+    values.filmBrightness = 0.0f;
+    values.filmDesaturation = 0.2f;
+    values.filmLightTint = 1.1f;
+    values.filmMediumTint = 0.9f;
+    values.filmDarkTint = 0.7f;
     return values;
 }
 

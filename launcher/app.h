@@ -45,11 +45,11 @@ float IniFloat(const std::wstring& path, const wchar_t* section, const wchar_t* 
 
 // The game's own settings file, in a "players" folder next to its executable.
 //
-// Some settings are never read from the dvar at run time. The mouse sensitivity
-// is one: the game copies it into the player profile when it starts and the
-// aiming code reads the profile from then on, so writing the dvar changes a
-// number that nothing consults. The config file is the path that works - it just
-// needs the next launch.
+// The mouse sensitivity is written the same way the game writes it, so the value
+// is still set on a launch that does not go through the unlocker. The cvar is
+// live - the aiming code reads it every frame - but the game loads this file at
+// startup and saves its own copy over it as it exits, which is why the worker
+// rewrites the line once the game has closed.
 std::wstring GameConfigPath(const std::wstring& gameDirectory, const std::wstring& gameName);
 
 // Set one "seta key value" line in a game config file. That file is a flat list

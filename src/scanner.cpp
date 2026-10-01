@@ -140,6 +140,46 @@ struct InsensitiveContext {
     bool found = false;
 };
 
+struct CandidateContext {
+    std::vector<uint8_t> needle; // lowercased, including the terminator
+    std::vector<uintptr_t> matches;
+};
+
+// Collects every match in a region instead of stopping at the first, so the
+// caller can rank them and reject the ones nothing points at.
+bool ScanRegionCandidates(uintptr_t regionStart, size_t regionSize, void* user) {
+    auto* ctx = static_cast<CandidateContext*>(user);
+    const size_t needleSize = ctx->needle.size();
+    if (regionSize < needleSize) {
+        return true;
+    }
+
+    const size_t chunkSize = 1u << 20;
+    std::vector<uint8_t> buffer;
+
+    for (size_t offset = 0; offset + needleSize <= regionSize; offset += chunkSize) {
+        const size_t remaining = regionSize - offset;
+        const size_t take =
+            (chunkSize + needleSize - 1) < remaining ? (chunkSize + needleSize - 1) : remaining;
+
+        buffer.resize(take);
+        std::memcpy(buffer.data(), reinterpret_cast<const void*>(regionStart + offset), take);
+        for (uint8_t& byte : buffer) {
+            if (byte >= 'A' && byte <= 'Z') {
+                byte = static_cast<uint8_t>(byte + ('a' - 'A'));
+            }
+        }
+
+        const size_t last = take - needleSize;
+        for (size_t i = 0; i <= last; ++i) {
+            if (std::memcmp(buffer.data() + i, ctx->needle.data(), needleSize) == 0) {
+                ctx->matches.push_back(regionStart + offset + i);
+            }
+        }
+    }
+    return true;
+}
+
 bool ScanRegionInsensitive(uintptr_t regionStart, size_t regionSize, void* user) {
     auto* ctx = static_cast<InsensitiveContext*>(user);
     const size_t needleSize = ctx->needle.size();
@@ -195,6 +235,58 @@ uintptr_t pattern::FindInsensitive(uintptr_t start, size_t size, const std::stri
 
     meml::ForEachReadableRegion(start, size, &ScanRegionInsensitive, &ctx);
     return ctx.found ? ctx.result : 0;
+}
+
+void pattern::FindCandidates(uintptr_t start, size_t size, const std::string& name,
+                             std::vector<uintptr_t>& out) {
+    out.clear();
+    if (start == 0 || size == 0 || name.empty()) {
+        return;
+    }
+
+    CandidateContext ctx;
+    ctx.needle.reserve(name.size() + 1);
+    for (const char character : name) {
+        const auto byte = static_cast<uint8_t>(character);
+        ctx.needle.push_back(byte >= 'A' && byte <= 'Z' ? static_cast<uint8_t>(byte + 32) : byte);
+    }
+    ctx.needle.push_back(0);
+
+    meml::ForEachReadableRegion(start, size, &ScanRegionCandidates, &ctx);
+
+    // Rank the matches into four buckets and concatenate them in order, rather
+    // than sorting: within a bucket the address order is the useful one, and it
+    // keeps the caller's log readable.
+    std::vector<uintptr_t> ideal;      // exact case, starts a string
+    std::vector<uintptr_t> exactCase;  // exact case, inside a longer string
+    std::vector<uintptr_t> startsText; // different case, starts a string
+    std::vector<uintptr_t> rest;
+
+    for (const uintptr_t match : ctx.matches) {
+        char probe[64] = {};
+        const size_t take = name.size() < sizeof(probe) ? name.size() : sizeof(probe) - 1;
+        const bool readable = meml::Read(match, probe, take);
+        const bool sameCase = readable && std::memcmp(probe, name.data(), take) == 0;
+
+        uint8_t previous = 0;
+        const bool beginsString =
+            match == start || (meml::Read(match - 1, &previous, 1) && !(previous >= 32 && previous < 127));
+
+        if (sameCase && beginsString) {
+            ideal.push_back(match);
+        } else if (sameCase) {
+            exactCase.push_back(match);
+        } else if (beginsString) {
+            startsText.push_back(match);
+        } else {
+            rest.push_back(match);
+        }
+    }
+
+    out.reserve(ctx.matches.size());
+    for (const std::vector<uintptr_t>* bucket : {&ideal, &exactCase, &startsText, &rest}) {
+        out.insert(out.end(), bucket->begin(), bucket->end());
+    }
 }
 
 uintptr_t pattern::ResolveRipRelative(uintptr_t instructionAddress, size_t displacementOffset,

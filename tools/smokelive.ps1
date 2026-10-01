@@ -19,6 +19,12 @@ param(
     [string]$Log = 'build\Release\mw2_unlocker.log'
 )
 
+# The struct below MIRRORS src/ipc.h. Change one and you must change the other:
+# the DLL checks cbData against its own sizeof(Values) and the version against
+# its own protocol version, and refuses anything that does not match - by design,
+# because a struct that has drifted is a struct that will corrupt memory.
+$ProtocolVersion = 9
+
 $ErrorActionPreference = 'Stop'
 
 Add-Type -Namespace Live -Name Client -MemberDefinition @'
@@ -34,6 +40,25 @@ public struct Values {
     public int counterEnabled;
     public int counterMode;
     public int netFpsEnabled;
+    public int toggleKey;
+    public int sensitivityEnabled;
+    public float sensitivityValue;
+    public int musicEnabled;
+    public int fullbrightEnabled;
+    public int hudEnabled;
+    public int moveGunEnabled; // the viewmodel offsets, not the "hide the gun" switch
+    public int fogEnabled;
+    public int filmTweakEnabled;
+    public int gunEnabled;
+    public float gunX;
+    public float gunY;
+    public float gunZ;
+    public float filmContrast;
+    public float filmBrightness;
+    public float filmDesaturation;
+    public float filmLightTint;
+    public float filmMediumTint;
+    public float filmDarkTint;
 }
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -121,9 +146,9 @@ public static int PayloadSize() {
 
 // Returns the value the receiving window procedure returned, or -1 if the
 // message could not be delivered at all.
-public static long Push(uint magic, int fps, float fov) {
+public static long Push(uint magic, uint version, int fps, float fov) {
     Values v = new Values();
-    v.version = 1;
+    v.version = version;
     v.fpsEnabled = 1;
     v.fpsValue = fps;
     v.fovEnabled = 1;
@@ -133,6 +158,27 @@ public static long Push(uint magic, int fps, float fov) {
     v.counterEnabled = 0;
     v.counterMode = 1;
     v.netFpsEnabled = 0;
+    // Straight from ipc::MakeDefault(): anything but 0x70..0x7B is ignored by
+    // the receiver, so this also proves the field was unmarshalled correctly.
+    v.toggleKey = 0x76; // F7, not the default F6, so the log shows the change
+    v.sensitivityEnabled = 1;
+    v.sensitivityValue = 3.45f;
+    v.musicEnabled = 1;
+    v.fullbrightEnabled = 1;
+    v.hudEnabled = 1;
+    v.moveGunEnabled = 1;
+    v.fogEnabled = 1;
+    v.filmTweakEnabled = 1;
+    v.gunEnabled = 1;
+    v.gunX = 1.25f;
+    v.gunY = -0.5f;
+    v.gunZ = 2.0f;
+    v.filmContrast = 1.4f;
+    v.filmBrightness = 0.1f;
+    v.filmDesaturation = 0.2f;
+    v.filmLightTint = 1.1f;
+    v.filmMediumTint = 0.9f;
+    v.filmDarkTint = 0.7f;
 
     int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Values));
     System.IntPtr payload = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
@@ -217,8 +263,10 @@ if ($window -eq [IntPtr]::Zero) {
 Write-Output "control window found - pushing values"
 
 # 0x4D573255 is ipc::kCopyDataMagic ('MW2U').
-$result = [Live.Client]::Push(0x4D573255, 333, 90.0)
-Write-Output ("SendMessageTimeout returned {0}" -f $result)
+$result = [Live.Client]::Push(0x4D573255, [uint32]$ProtocolVersion, 333, 90.0)
+Write-Output ("SendMessageTimeout returned {0} (1 = the receiver applied something)" -f $result)
+if ($result -eq -1) { Write-Output "the message could not be delivered" }
+if ($result -eq -2) { Write-Output "the control window could not be found" }
 
 Start-Sleep -Seconds 1
 

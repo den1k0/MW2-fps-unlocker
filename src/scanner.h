@@ -32,6 +32,24 @@ uintptr_t FindInModule(const char* moduleName, const std::string& signature);
 // so name lookups go through here rather than the byte-exact scanner.
 uintptr_t FindInsensitive(uintptr_t start, size_t size, const std::string& name);
 
+// Every place the name appears as a whole null-terminated string, best
+// candidate first.
+//
+// One match is not enough to identify a cvar. This build holds "Sensitivity"
+// (a profile field label) as well as the cvar "sensitivity", so a
+// case-insensitive first-match search returns the label, finds nothing pointing
+// at it, and gives up - which looks exactly like a cvar that does not exist.
+// The caller has to be able to try the next candidate, so all of them are
+// returned, ranked:
+//
+//   * an exact-case match that also starts a string is what a cvar name is
+//   * the same match with different capitalisation still counts, because
+//     guides disagree with the binary about case
+//   * a match inside a longer string is ranked last, since a name that does
+//     not begin its string cannot be the name of anything
+void FindCandidates(uintptr_t start, size_t size, const std::string& name,
+                    std::vector<uintptr_t>& out);
+
 // Resolve a RIP-relative disp32 operand to an absolute address, x64 style:
 //     target = instructionAddress + instructionLength + disp32
 // `displacementOffset` is the byte offset of the 4-byte displacement inside the

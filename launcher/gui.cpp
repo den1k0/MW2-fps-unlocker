@@ -20,6 +20,7 @@
 #include <uxtheme.h>
 
 #include <string>
+#include <vector>
 
 #include "app.h"
 #include "gui.h"
@@ -47,12 +48,52 @@ constexpr int kIdStatus = 1011;
 constexpr int kIdApply = 1012;
 constexpr int kIdFpsHeader = 1013;
 constexpr int kIdFovHeader = 1014;
-constexpr int kIdToggleHeader = 1015;
+// 1015 is free: it was the old catch-all card's title, which became
+// kIdOtherHeader when the viewmodel and film tweak cards were split out of it.
 constexpr int kIdToggleKey = 1016;
-constexpr int kIdSensHeader = 1017;
-constexpr int kIdSensEnable = 1018;
-constexpr int kIdSensSlider = 1019;
-constexpr int kIdSensValue = 1020;
+constexpr int kIdFilmHeader = 1017; // the film tweak card, split out of Other Settings
+constexpr int kIdMusicEnable = 1018;
+constexpr int kIdFullbrightEnable = 1019;
+constexpr int kIdHudEnable = 1020;
+constexpr int kIdGunEnable = 1021;
+constexpr int kIdFogEnable = 1022;
+constexpr int kIdFilmTweakEnable = 1023;
+constexpr int kIdViewModelHeader = 1024;
+constexpr int kIdGunXSlider = 1025;
+constexpr int kIdGunXValue = 1026;
+constexpr int kIdGunYSlider = 1027;
+constexpr int kIdGunYValue = 1028;
+constexpr int kIdGunZSlider = 1029;
+constexpr int kIdGunZValue = 1030;
+constexpr int kIdMoveGunEnable = 1031;
+constexpr int kIdOtherHeader = 1032;
+constexpr int kIdCloseWithGame = 1033;
+constexpr int kIdFilmContrastSlider = 1034;
+constexpr int kIdFilmContrastValue = 1035;
+constexpr int kIdFilmBrightnessSlider = 1036;
+constexpr int kIdFilmBrightnessValue = 1037;
+constexpr int kIdFilmDesaturationSlider = 1038;
+constexpr int kIdFilmDesaturationValue = 1039;
+constexpr int kIdFilmLightTintSlider = 1040;
+constexpr int kIdFilmLightTintValue = 1041;
+constexpr int kIdFilmMediumTintSlider = 1042;
+constexpr int kIdFilmMediumTintValue = 1043;
+constexpr int kIdFilmDarkTintSlider = 1044;
+constexpr int kIdFilmDarkTintValue = 1045;
+
+// The row labels carry ids, although nothing ever asks them for their text,
+// because the two collapsible cards move and hide whole rows by id. An
+// unlabelled static is id -1, and -1 finds nothing.
+constexpr int kIdGunXLabel = 1046;
+constexpr int kIdGunYLabel = 1047;
+constexpr int kIdGunZLabel = 1048;
+constexpr int kIdFilmContrastLabel = 1049;
+constexpr int kIdFilmBrightnessLabel = 1050;
+constexpr int kIdFilmDesaturationLabel = 1051;
+constexpr int kIdFilmLightTintLabel = 1052;
+constexpr int kIdFilmMediumTintLabel = 1053;
+constexpr int kIdFilmDarkTintLabel = 1054;
+constexpr int kIdToggleKeyLabel = 1055;
 
 // The frame cap accepts anything up to 1000 because the engine does not enforce
 // the 100 its own registration declares: 250 and 333 were measured working.
@@ -61,11 +102,30 @@ constexpr int kFpsMax = 1000;
 constexpr int kFovMin = 65;
 constexpr int kFovMax = 179;
 
-// Sensitivity is a float, and the whole point of the control is precision, so
-// the slider works in hundredths: 100..2000 is 1.00..20.00. The game's own
-// slider stops at 10 and shows no number at all, which is why this exists.
-constexpr int kSensMin = 100;
-constexpr int kSensMax = 2000;
+// The viewmodel offsets are floats in engine units and the game clamps them not
+// at all (the registration passes -FLT_MAX as its minimum), so the range is the
+// window's own choice: -10.00 to +10.00, in hundredths. Ten units is far more
+// than the pose can usefully be shifted by, and the hundredths still give the
+// slider fine steps. The config accepts anything if you want to go further.
+constexpr int kGunMin = -1000;
+constexpr int kGunMax = 1000;
+
+// The film tweak's six sliders, in hundredths. These follow the game's own
+// registered domains rather than widening them: contrast has nowhere to go below
+// 0, and the desaturation the game considers valid starts at -2. The tints are
+// colour dvars whose defaults all sit near 1 - below 0 they invert the channel
+// rather than dim it - so 0.00 to 2.00 is the useful span.
+//
+// The defaults are the registered ones, so the sliders start where the game
+// does: contrast 1.4, brightness 0, desaturation 0.2, tints 1.1, 0.9 and 0.7.
+constexpr int kContrastMin = 0;
+constexpr int kContrastMax = 300;
+constexpr int kBrightnessMin = -100;
+constexpr int kBrightnessMax = 100;
+constexpr int kDesaturationMin = -100;
+constexpr int kDesaturationMax = 200;
+constexpr int kTintMin = 0;
+constexpr int kTintMax = 200;
 
 // The clamp offset used when the clamp box is ticked. 179 is the widest the
 // engine accepts without the view shearing.
@@ -107,8 +167,25 @@ HBRUSH g_cardBrush = nullptr;
 HBRUSH g_grooveBrush = nullptr;
 HFONT g_headerFont = nullptr;
 
-// The dialog's cards, in pixels, converted from dialog units at startup.
-RECT g_cards[4] = {};
+// The dialog's five cards, in dialog units: the frame cap, the field of view,
+// the viewmodel, the film tweak, and the catch-all that holds the switches, the
+// hotkey and the close-with-game box. ApplyLayout shortens the two collapsible
+// ones when their rows are hidden.
+constexpr int kCardCount = 5;
+const RECT kCardUnits[kCardCount] = {
+    {10, 20, 290, 88},   // frame rate cap
+    {10, 94, 290, 182},  // field of view
+    {10, 188, 290, 277}, // viewmodel offsets: switch, then X, Y and Z
+    {10, 283, 290, 407}, // film tweak: switch, then three scalars and three tints
+    {10, 413, 290, 504}, // other settings, which holds the hotkey too
+};
+
+// The height the template asks for, in dialog units. ApplyLayout takes the two
+// collapsible cards' current heights off that.
+constexpr int kDialogHeight = 556;
+
+// The same cards in pixels, converted whenever the window is re-laid out.
+RECT g_cards[kCardCount] = {};
 
 // Working state for one window. Owned by gui::Run and freed only after the
 // worker thread has been joined, so the worker can never touch freed memory.
@@ -131,11 +208,38 @@ struct State {
     bool fpsOn = true;
     bool fovOn = true;
     bool clampOn = false;
-    bool sensOn = false; // off by default: it changes how the game plays
+    // The viewmodel offsets: a value rather than a switch, but one setting, so
+    // they share a single enable and are kept in hundredths like the sliders
+    // that show them.
+    bool moveGunOn = false;
+    int gunX = 0;
+    int gunY = 0;
+    int gunZ = 0;
+
+    // The film tweak's scalars, held in hundredths like every other slider here.
+    int filmContrast = 140;    // 1.40, the game's own default
+    int filmBrightness = 0;
+    int filmDesaturation = 20; // 0.20
+    int filmLightTint = 110;   // 1.10 - these three are grey levels, written to
+    int filmMediumTint = 90;   // the first three components of a colour dvar
+    int filmDarkTint = 70;     // 0.70
+
+    // A launcher setting, not a game cvar: it lives in [general] and says whether
+    // this window closes itself when the game exits.
+    bool closeWithGame = true;
+
+    bool musicOn = false;      // these four are off by default as well: they
+    bool fullbrightOn = false; // change the game rather than fixing something
+    bool hudOn = false;
+    bool gunOn = false;
+    bool fogOn = false;
+    bool filmTweakOn = false;
 
     // Filled in by the worker once the game is found. Together these locate the
-    // game's own settings file, which is where the mouse sensitivity has to be
-    // written - see the note in app.h.
+    // game's own settings file, which is what the [sensitivity] section of the
+    // config is written into - see the note in app.h. That section has no
+    // controls in this window (see the note at the card rectangles below), but
+    // it is still applied when it is switched on in the file.
     std::wstring gameDirectory;
     std::wstring gameName;
 };
@@ -148,8 +252,22 @@ bool* CheckState(State& state, int id) {
         return &state.fovOn;
     case kIdFovClamp:
         return &state.clampOn;
-    case kIdSensEnable:
-        return &state.sensOn;
+    case kIdMusicEnable:
+        return &state.musicOn;
+    case kIdFullbrightEnable:
+        return &state.fullbrightOn;
+    case kIdHudEnable:
+        return &state.hudOn;
+    case kIdGunEnable:
+        return &state.gunOn;
+    case kIdFogEnable:
+        return &state.fogOn;
+    case kIdFilmTweakEnable:
+        return &state.filmTweakOn;
+    case kIdMoveGunEnable:
+        return &state.moveGunOn;
+    case kIdCloseWithGame:
+        return &state.closeWithGame;
     default:
         return nullptr;
     }
@@ -642,6 +760,51 @@ void DrawCheckbox(HDC dc, const RECT& rect, const std::wstring& text, bool check
     ::DrawTextW(dc, text.c_str(), -1, &label, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 }
 
+// A checkbox that opens a stack of rows underneath it. The triangle is the only
+// thing telling the user there is more to this card, so it is drawn whether the
+// card is open or closed: pointing down when the rows are showing, right when
+// they are folded away. It takes the accent colour only while something is
+// hidden, which keeps the window quiet once everything is unfolded.
+void DrawExpandableCheckbox(HDC dc, const RECT& rect, const std::wstring& text, bool checked,
+                            bool expanded, bool focused, bool disabled) {
+    // The triangle lives in a column of its own. Both forms fill the same box -
+    // one square, one tall - so they line up on the same left edge and neither
+    // crowds the checkbox, which a wider flat triangle would.
+    constexpr int kArrowBox = 18;
+    constexpr int kArrow = 8;
+    constexpr int kArrowInset = 2; // keeps a clear gap between arrow and box
+
+    ::FillRect(dc, &rect, g_cardBrush);
+
+    const int boxLeft = rect.left + kArrowInset;
+    const int boxTop = rect.top + ((rect.bottom - rect.top) - kArrow) / 2;
+    POINT triangle[3];
+    if (expanded) {
+        triangle[0] = {boxLeft, boxTop};
+        triangle[1] = {boxLeft + kArrow, boxTop};
+        triangle[2] = {boxLeft + kArrow / 2, boxTop + kArrow};
+    } else {
+        triangle[0] = {boxLeft, boxTop};
+        triangle[1] = {boxLeft, boxTop + kArrow};
+        triangle[2] = {boxLeft + kArrow, boxTop + kArrow / 2};
+    }
+
+    const COLORREF colour = (disabled || expanded) ? kTextDim : kAccent;
+    HBRUSH fill = ::CreateSolidBrush(colour);
+    HPEN pen = ::CreatePen(PS_SOLID, 1, colour);
+    HBRUSH oldBrush = static_cast<HBRUSH>(::SelectObject(dc, fill));
+    HPEN oldPen = static_cast<HPEN>(::SelectObject(dc, pen));
+    ::Polygon(dc, triangle, 3);
+    ::SelectObject(dc, oldBrush);
+    ::SelectObject(dc, oldPen);
+    ::DeleteObject(fill);
+    ::DeleteObject(pen);
+
+    // The same checkbox and label, shifted to make room for the triangle.
+    RECT inner{rect.left + kArrowBox, rect.top, rect.right, rect.bottom};
+    DrawCheckbox(dc, inner, text, checked, focused, disabled);
+}
+
 void DrawButton(HDC dc, const RECT& rect, const std::wstring& text, bool primary, bool pressed,
                 bool focused, bool disabled) {
     ::FillRect(dc, &rect, g_backgroundBrush);
@@ -700,12 +863,18 @@ std::wstring FormatHex(int value) {
     return std::wstring(buffer);
 }
 
-// The sensitivity slider counts hundredths, and the number box is the reason the
-// control is here at all, so it is shown with two decimals.
+// The viewmodel offsets are shown with two decimals: they are small numbers, and
+// hundredths is the step the sliders move in.
 std::wstring FormatHundredths(int hundredths) {
     wchar_t buffer[32] = {};
     ::swprintf_s(buffer, L"%.2f", hundredths / 100.0);
     return std::wstring(buffer);
+}
+
+// A float back to hundredths, rounded away from zero so a negative value does not
+// get truncated towards it and lose a hundredth every time the window is opened.
+int ToHundredths(float value) {
+    return static_cast<int>(value * 100.0f + (value >= 0.0f ? 0.5f : -0.5f));
 }
 
 void SetControlText(HWND dialog, int id, const std::wstring& text) {
@@ -757,15 +926,250 @@ void UpdateEnabledState(HWND dialog, State& state) {
     ::EnableWindow(::GetDlgItem(dialog, kIdFovValue), state.fovOn);
     ::EnableWindow(::GetDlgItem(dialog, kIdFovClamp), state.fovOn);
 
-    ::EnableWindow(SliderHandle(dialog, kIdSensSlider), state.sensOn);
-    ::EnableWindow(::GetDlgItem(dialog, kIdSensValue), state.sensOn);
+    // The three viewmodel sliders belong to the one switch above them.
+    ::EnableWindow(SliderHandle(dialog, kIdGunXSlider), state.moveGunOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdGunXValue), state.moveGunOn);
+    ::EnableWindow(SliderHandle(dialog, kIdGunYSlider), state.moveGunOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdGunYValue), state.moveGunOn);
+    ::EnableWindow(SliderHandle(dialog, kIdGunZSlider), state.moveGunOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdGunZValue), state.moveGunOn);
+
+    // The film tweak's sliders are only meaningful with the grade switched on.
+    ::EnableWindow(SliderHandle(dialog, kIdFilmContrastSlider), state.filmTweakOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdFilmContrastValue), state.filmTweakOn);
+    ::EnableWindow(SliderHandle(dialog, kIdFilmBrightnessSlider), state.filmTweakOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdFilmBrightnessValue), state.filmTweakOn);
+    ::EnableWindow(SliderHandle(dialog, kIdFilmDesaturationSlider), state.filmTweakOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdFilmDesaturationValue), state.filmTweakOn);
+    ::EnableWindow(SliderHandle(dialog, kIdFilmLightTintSlider), state.filmTweakOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdFilmLightTintValue), state.filmTweakOn);
+    ::EnableWindow(SliderHandle(dialog, kIdFilmMediumTintSlider), state.filmTweakOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdFilmMediumTintValue), state.filmTweakOn);
+    ::EnableWindow(SliderHandle(dialog, kIdFilmDarkTintSlider), state.filmTweakOn);
+    ::EnableWindow(::GetDlgItem(dialog, kIdFilmDarkTintValue), state.filmTweakOn);
 
     // Redraw the boxes, because a disabled owner-drawn button does not repaint
     // itself when the state changes.
     ::InvalidateRect(::GetDlgItem(dialog, kIdFpsEnable), nullptr, TRUE);
     ::InvalidateRect(::GetDlgItem(dialog, kIdFovEnable), nullptr, TRUE);
     ::InvalidateRect(::GetDlgItem(dialog, kIdFovClamp), nullptr, TRUE);
-    ::InvalidateRect(::GetDlgItem(dialog, kIdSensEnable), nullptr, TRUE);
+}
+
+// -----------------------------------------------------------------------------
+// Collapsible cards.
+//
+// The viewmodel and the film tweak each carry a switch and a stack of rows, and
+// the rows mean nothing while the switch is off. Rather than leave them greyed
+// out, they are hidden and everything below them is pulled up, so the window is
+// only as tall as the settings it is actually showing.
+//
+// Nothing here repeats the template's coordinates. The dialog is measured once
+// at start-up - every control's position, converted back into dialog units - and
+// each change is applied as an offset from that measurement. The two stay in
+// step when the template is edited, and clicking the switches any number of
+// times cannot drift, because the offsets are always taken from the original.
+// -----------------------------------------------------------------------------
+
+// The gap the template leaves between a card's last control and its bottom edge.
+// A collapsed card keeps the same gap under its switch.
+constexpr int kCardGap = 6;
+
+struct PlacedControl {
+    int id = 0;
+    RECT units{};  // where the template put it
+    RECT pixels{}; // where that is in the window
+};
+
+std::vector<PlacedControl> g_placed;
+int g_unitX = 0; // pixels per four horizontal dialog units
+int g_unitY = 0; // pixels per eight vertical dialog units
+
+int UnitsToY(int units) {
+    return ::MulDiv(units, g_unitY, 8);
+}
+
+int YToUnits(int pixels) {
+    return ::MulDiv(pixels, 8, g_unitY);
+}
+
+int XToUnits(int pixels) {
+    return ::MulDiv(pixels, 4, g_unitX);
+}
+
+const PlacedControl* FindPlaced(int id) {
+    for (const PlacedControl& placed : g_placed) {
+        if (placed.id == id) {
+            return &placed;
+        }
+    }
+    return nullptr;
+}
+
+// The rows that only exist while their card is switched on.
+const int kGunRows[] = {kIdGunXLabel, kIdGunXSlider, kIdGunXValue, kIdGunYLabel,
+                        kIdGunYSlider, kIdGunYValue, kIdGunZLabel, kIdGunZSlider,
+                        kIdGunZValue};
+
+const int kFilmRows[] = {
+    kIdFilmContrastLabel,     kIdFilmContrastSlider,     kIdFilmContrastValue,
+    kIdFilmBrightnessLabel,   kIdFilmBrightnessSlider,   kIdFilmBrightnessValue,
+    kIdFilmDesaturationLabel, kIdFilmDesaturationSlider, kIdFilmDesaturationValue,
+    kIdFilmLightTintLabel,    kIdFilmLightTintSlider,    kIdFilmLightTintValue,
+    kIdFilmMediumTintLabel,   kIdFilmMediumTintSlider,   kIdFilmMediumTintValue,
+    kIdFilmDarkTintLabel,     kIdFilmDarkTintSlider,     kIdFilmDarkTintValue,
+};
+
+void ShowRows(HWND dialog, const int* ids, int count, bool visible) {
+    for (int i = 0; i < count; ++i) {
+        ::ShowWindow(::GetDlgItem(dialog, ids[i]), visible ? SW_SHOW : SW_HIDE);
+    }
+}
+
+// Measure the template's layout, before anything has been moved. Called once.
+void SnapshotLayout(HWND dialog) {
+    g_placed.clear();
+
+    RECT base{0, 0, 4, 8};
+    ::MapDialogRect(dialog, &base);
+    g_unitX = base.right;
+    g_unitY = base.bottom;
+
+    for (HWND child = ::GetWindow(dialog, GW_CHILD); child != nullptr;
+         child = ::GetWindow(child, GW_HWNDNEXT)) {
+        const int id = ::GetDlgCtrlID(child);
+        // An unlabelled static has id -1, and none of those ever moves: they all
+        // sit in the two cards that cannot collapse.
+        if (id <= 0) {
+            continue;
+        }
+
+        RECT window{};
+        ::GetWindowRect(child, &window);
+        POINT corner{window.left, window.top};
+        ::ScreenToClient(dialog, &corner);
+
+        PlacedControl placed;
+        placed.id = id;
+        placed.pixels = {corner.x, corner.y, corner.x + (window.right - window.left),
+                         corner.y + (window.bottom - window.top)};
+        placed.units = {XToUnits(placed.pixels.left), YToUnits(placed.pixels.top),
+                        XToUnits(placed.pixels.right), YToUnits(placed.pixels.bottom)};
+        g_placed.push_back(placed);
+    }
+}
+
+// Put the window back together for the two switches' current state. Cheap enough
+// to call on every toggle: the work is a few dozen SetWindowPos calls.
+void ApplyLayout(HWND dialog, const State& state) {
+    const PlacedControl* gunSwitch = FindPlaced(kIdMoveGunEnable);
+    const PlacedControl* gunFirstRow = FindPlaced(kIdGunXSlider);
+    const PlacedControl* gunLastRow = FindPlaced(kIdGunZSlider);
+    const PlacedControl* filmSwitch = FindPlaced(kIdFilmTweakEnable);
+    const PlacedControl* filmFirstRow = FindPlaced(kIdFilmContrastSlider);
+    const PlacedControl* filmLastRow = FindPlaced(kIdFilmDarkTintSlider);
+    if (gunSwitch == nullptr || gunFirstRow == nullptr || gunLastRow == nullptr ||
+        filmSwitch == nullptr || filmFirstRow == nullptr || filmLastRow == nullptr) {
+        return;
+    }
+
+    const bool gunOpen = state.moveGunOn;
+    const bool filmOpen = state.filmTweakOn;
+
+    // Both cards hang their rows under their switch, so one rule covers them:
+    // closing a card takes away exactly the height those rows occupy, which is
+    // the distance from the switch's bottom edge to the last row's. Measured,
+    // not written down, so the template can be re-spaced without touching this.
+    const int gunDelta = gunOpen ? 0 : gunSwitch->units.bottom - gunLastRow->units.bottom;
+    const int filmDelta = filmOpen ? 0 : filmSwitch->units.bottom - filmLastRow->units.bottom;
+
+    for (const PlacedControl& placed : g_placed) {
+        // A control moves with a card if it sits at or below the first row that
+        // card gives up. The switch is the anchor for neither: it is the thing
+        // that opens the card, so it stays exactly where its title put it and
+        // the rows come and go underneath it.
+        int delta = 0;
+        if (placed.units.top >= gunFirstRow->units.top) {
+            delta += gunDelta;
+        }
+        if (placed.units.top >= filmFirstRow->units.top) {
+            delta += filmDelta;
+        }
+        // The rows of a closed card collect its shift as well. That is
+        // harmless - they are hidden whenever their own shift is not zero, and
+        // it is zero whenever they are showing, which is when their position
+        // matters.
+        //
+        // Always an absolute position, never a nudge: opening a card again makes
+        // its offset zero, and skipping those controls would leave them where
+        // the collapse had put them.
+        ::SetWindowPos(::GetDlgItem(dialog, placed.id), nullptr, placed.pixels.left,
+                       placed.pixels.top + UnitsToY(delta), 0, 0,
+                       SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    ShowRows(dialog, kGunRows, ARRAYSIZE(kGunRows), gunOpen);
+    ShowRows(dialog, kFilmRows, ARRAYSIZE(kFilmRows), filmOpen);
+
+    // The cards. A collapsed one ends just under its switch, and the cards below
+    // it follow the same distance down.
+    RECT cards[kCardCount];
+    for (int i = 0; i < kCardCount; ++i) {
+        cards[i] = kCardUnits[i];
+    }
+    if (!gunOpen) {
+        cards[2].bottom = gunSwitch->units.bottom + kCardGap;
+    }
+    cards[3].top += gunDelta;
+    cards[3].bottom += gunDelta;
+    cards[4].top += gunDelta;
+    cards[4].bottom += gunDelta;
+    if (!filmOpen) {
+        cards[3].bottom = filmSwitch->units.bottom + kCardGap + gunDelta;
+    }
+    cards[4].top += filmDelta;
+    cards[4].bottom += filmDelta;
+    for (int i = 0; i < kCardCount; ++i) {
+        g_cards[i] = cards[i];
+        ::MapDialogRect(dialog, &g_cards[i]);
+    }
+
+    // And the window itself, so its bottom edge follows instead of leaving a
+    // field of empty background under the buttons. The frame is whatever the
+    // window manager added around the client area.
+    RECT window{};
+    RECT client{};
+    ::GetWindowRect(dialog, &window);
+    ::GetClientRect(dialog, &client);
+    const int frame = (window.bottom - window.top) - client.bottom;
+    ::SetWindowPos(dialog, nullptr, 0, 0, window.right - window.left,
+                   UnitsToY(kDialogHeight + gunDelta + filmDelta) + frame,
+                   SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+    ::InvalidateRect(dialog, nullptr, TRUE);
+}
+
+// Put the window in the middle of the monitor it landed on. The template is the
+// fully expanded layout, and the dialog manager centres against that before the
+// saved values are read, so a window with both cards folded away would otherwise
+// sit well above centre with a gap underneath it.
+//
+// Only done once, at start-up: re-centring on every toggle would make the window
+// jump about while the user is clicking it.
+void CentreOnMonitor(HWND dialog) {
+    RECT window{};
+    ::GetWindowRect(dialog, &window);
+
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    if (!::GetMonitorInfoW(::MonitorFromWindow(dialog, MONITOR_DEFAULTTONEAREST), &info)) {
+        return;
+    }
+
+    const int width = window.right - window.left;
+    const int height = window.bottom - window.top;
+    const int x = info.rcWork.left + ((info.rcWork.right - info.rcWork.left) - width) / 2;
+    const int y = info.rcWork.top + ((info.rcWork.bottom - info.rcWork.top) - height) / 2;
+    ::SetWindowPos(dialog, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 void SyncControls(HWND dialog, State& state) {
@@ -784,12 +1188,58 @@ void SyncControls(HWND dialog, State& state) {
 
     state.clampOn = values.fovClampEnabled != 0;
 
-    state.sensOn = values.sensitivityEnabled != 0;
-    SetSliderRange(dialog, kIdSensSlider, kSensMin, kSensMax);
-    const int sensitivity =
-        ClampInt(static_cast<int>(values.sensitivityValue * 100.0f + 0.5f), kSensMin, kSensMax);
-    SetSliderPosition(dialog, kIdSensSlider, sensitivity);
-    SetControlText(dialog, kIdSensValue, FormatHundredths(sensitivity));
+    state.musicOn = values.musicEnabled != 0;
+    state.fullbrightOn = values.fullbrightEnabled != 0;
+    state.hudOn = values.hudEnabled != 0;
+    state.gunOn = values.gunEnabled != 0;
+    state.fogOn = values.fogEnabled != 0;
+    state.filmTweakOn = values.filmTweakEnabled != 0;
+
+    // The viewmodel offsets have their own flag. Reading gunEnabled here instead
+    // meant the tick mirrored the "hide the weapon model" switch, so a
+    // [cg_gun_x] section switched on in the file came back unticked - and the
+    // next Apply then wrote that unticked state back over all three sections.
+    state.moveGunOn = values.moveGunEnabled != 0;
+    state.gunX = ClampInt(ToHundredths(values.gunX), kGunMin, kGunMax);
+    state.gunY = ClampInt(ToHundredths(values.gunY), kGunMin, kGunMax);
+    state.gunZ = ClampInt(ToHundredths(values.gunZ), kGunMin, kGunMax);
+    SetSliderRange(dialog, kIdGunXSlider, kGunMin, kGunMax);
+    SetSliderRange(dialog, kIdGunYSlider, kGunMin, kGunMax);
+    SetSliderRange(dialog, kIdGunZSlider, kGunMin, kGunMax);
+    SetSliderPosition(dialog, kIdGunXSlider, state.gunX);
+    SetSliderPosition(dialog, kIdGunYSlider, state.gunY);
+    SetSliderPosition(dialog, kIdGunZSlider, state.gunZ);
+    SetControlText(dialog, kIdGunXValue, FormatHundredths(state.gunX));
+    SetControlText(dialog, kIdGunYValue, FormatHundredths(state.gunY));
+    SetControlText(dialog, kIdGunZValue, FormatHundredths(state.gunZ));
+
+    state.filmContrast = ClampInt(ToHundredths(values.filmContrast), kContrastMin, kContrastMax);
+    state.filmBrightness =
+        ClampInt(ToHundredths(values.filmBrightness), kBrightnessMin, kBrightnessMax);
+    state.filmDesaturation =
+        ClampInt(ToHundredths(values.filmDesaturation), kDesaturationMin, kDesaturationMax);
+    SetSliderRange(dialog, kIdFilmContrastSlider, kContrastMin, kContrastMax);
+    SetSliderRange(dialog, kIdFilmBrightnessSlider, kBrightnessMin, kBrightnessMax);
+    SetSliderRange(dialog, kIdFilmDesaturationSlider, kDesaturationMin, kDesaturationMax);
+    SetSliderPosition(dialog, kIdFilmContrastSlider, state.filmContrast);
+    SetSliderPosition(dialog, kIdFilmBrightnessSlider, state.filmBrightness);
+    SetSliderPosition(dialog, kIdFilmDesaturationSlider, state.filmDesaturation);
+    SetControlText(dialog, kIdFilmContrastValue, FormatHundredths(state.filmContrast));
+    SetControlText(dialog, kIdFilmBrightnessValue, FormatHundredths(state.filmBrightness));
+    SetControlText(dialog, kIdFilmDesaturationValue, FormatHundredths(state.filmDesaturation));
+
+    state.filmLightTint = ClampInt(ToHundredths(values.filmLightTint), kTintMin, kTintMax);
+    state.filmMediumTint = ClampInt(ToHundredths(values.filmMediumTint), kTintMin, kTintMax);
+    state.filmDarkTint = ClampInt(ToHundredths(values.filmDarkTint), kTintMin, kTintMax);
+    SetSliderRange(dialog, kIdFilmLightTintSlider, kTintMin, kTintMax);
+    SetSliderRange(dialog, kIdFilmMediumTintSlider, kTintMin, kTintMax);
+    SetSliderRange(dialog, kIdFilmDarkTintSlider, kTintMin, kTintMax);
+    SetSliderPosition(dialog, kIdFilmLightTintSlider, state.filmLightTint);
+    SetSliderPosition(dialog, kIdFilmMediumTintSlider, state.filmMediumTint);
+    SetSliderPosition(dialog, kIdFilmDarkTintSlider, state.filmDarkTint);
+    SetControlText(dialog, kIdFilmLightTintValue, FormatHundredths(state.filmLightTint));
+    SetControlText(dialog, kIdFilmMediumTintValue, FormatHundredths(state.filmMediumTint));
+    SetControlText(dialog, kIdFilmDarkTintValue, FormatHundredths(state.filmDarkTint));
 
     SetKeyBoxKey(dialog, values.toggleKey);
 
@@ -827,6 +1277,47 @@ void LoadValues(State& state) {
         app::IniInt(path, L"sensitivity", L"enabled", state.values.sensitivityEnabled) != 0;
     state.values.sensitivityValue = app::IniFloat(path, L"sensitivity", L"value",
                                                   state.values.sensitivityValue);
+
+    // The three viewmodel offsets are one setting, so [cg_gun_x] carries the
+    // enabled flag for all of them and each section carries its own value.
+    state.values.moveGunEnabled =
+        app::IniInt(path, L"cg_gun_x", L"enabled", state.values.moveGunEnabled) != 0;
+    state.values.gunX = app::IniFloat(path, L"cg_gun_x", L"value", state.values.gunX);
+    state.values.gunY = app::IniFloat(path, L"cg_gun_y", L"value", state.values.gunY);
+    state.values.gunZ = app::IniFloat(path, L"cg_gun_z", L"value", state.values.gunZ);
+
+    // The film tweak and its three scalars.
+    state.values.filmTweakEnabled =
+        app::IniInt(path, L"r_filmTweakEnable", L"enabled", state.values.filmTweakEnabled) != 0;
+    state.values.filmContrast =
+        app::IniFloat(path, L"r_filmTweakContrast", L"value", state.values.filmContrast);
+    state.values.filmBrightness =
+        app::IniFloat(path, L"r_filmTweakBrightness", L"value", state.values.filmBrightness);
+    state.values.filmDesaturation =
+        app::IniFloat(path, L"r_filmTweakDesaturation", L"value", state.values.filmDesaturation);
+    state.values.filmLightTint =
+        app::IniFloat(path, L"r_filmTweakLightTint", L"value", state.values.filmLightTint);
+    state.values.filmMediumTint =
+        app::IniFloat(path, L"r_filmTweakMediumTint", L"value", state.values.filmMediumTint);
+    state.values.filmDarkTint =
+        app::IniFloat(path, L"r_filmTweakDarkTint", L"value", state.values.filmDarkTint);
+
+    // Every switch that has a control in the window. These were missing, which
+    // meant a section switched on in the file showed as unticked here - and the
+    // next Apply then wrote the unticked state back over it, switching the
+    // feature off.
+    state.values.musicEnabled =
+        app::IniInt(path, L"music", L"enabled", state.values.musicEnabled) != 0;
+    state.values.fullbrightEnabled =
+        app::IniInt(path, L"r_fullbright", L"enabled", state.values.fullbrightEnabled) != 0;
+    state.values.hudEnabled =
+        app::IniInt(path, L"cg_draw2D", L"enabled", state.values.hudEnabled) != 0;
+    state.values.gunEnabled =
+        app::IniInt(path, L"cg_drawGun", L"enabled", state.values.gunEnabled) != 0;
+    state.values.fogEnabled = app::IniInt(path, L"r_fog", L"enabled", state.values.fogEnabled) != 0;
+
+    // The one setting here that is not a game cvar at all.
+    state.closeWithGame = app::IniInt(path, L"general", L"closeWithGame", 1) != 0;
 }
 
 void ReadControls(HWND dialog, State& state) {
@@ -841,11 +1332,45 @@ void ReadControls(HWND dialog, State& state) {
     values.fovClampEnabled = state.clampOn ? 1 : 0;
     values.fovClampValue = kFovClampValue;
 
+    values.musicEnabled = state.musicOn ? 1 : 0;
+    values.fullbrightEnabled = state.fullbrightOn ? 1 : 0;
+    values.hudEnabled = state.hudOn ? 1 : 0;
+    values.gunEnabled = state.gunOn ? 1 : 0;
+    values.fogEnabled = state.fogOn ? 1 : 0;
+    values.filmTweakEnabled = state.filmTweakOn ? 1 : 0;
+
+    // One switch, three values: the window writes the same enabled flag to all
+    // three sections, because moving the viewmodel in one axis alone is not a
+    // thing anyone wants.
+    values.moveGunEnabled = state.moveGunOn ? 1 : 0;
+    values.gunX = static_cast<float>(SliderPosition(dialog, kIdGunXSlider)) / 100.0f;
+    values.gunY = static_cast<float>(SliderPosition(dialog, kIdGunYSlider)) / 100.0f;
+    values.gunZ = static_cast<float>(SliderPosition(dialog, kIdGunZSlider)) / 100.0f;
+
+    // The film tweak's scalars share its switch.
+    values.filmContrast =
+        static_cast<float>(SliderPosition(dialog, kIdFilmContrastSlider)) / 100.0f;
+    values.filmBrightness =
+        static_cast<float>(SliderPosition(dialog, kIdFilmBrightnessSlider)) / 100.0f;
+    values.filmDesaturation =
+        static_cast<float>(SliderPosition(dialog, kIdFilmDesaturationSlider)) / 100.0f;
+
+    // The three tints are colour dvars in the game - four floats each - but the
+    // engine writes the same bytes to every offset the section lists, so one
+    // number here becomes a neutral grey tint. See src/features.cpp.
+    values.filmLightTint =
+        static_cast<float>(SliderPosition(dialog, kIdFilmLightTintSlider)) / 100.0f;
+    values.filmMediumTint =
+        static_cast<float>(SliderPosition(dialog, kIdFilmMediumTintSlider)) / 100.0f;
+    values.filmDarkTint =
+        static_cast<float>(SliderPosition(dialog, kIdFilmDarkTintSlider)) / 100.0f;
+
     values.toggleKey = KeyBoxKey(dialog);
 
-    values.sensitivityEnabled = state.sensOn ? 1 : 0;
-    values.sensitivityValue =
-        static_cast<float>(SliderPosition(dialog, kIdSensSlider)) / 100.0f;
+    // sensitivityEnabled and sensitivityValue are deliberately left exactly as
+    // they were read from the file. This window has no controls for them, so
+    // Apply must not overwrite them with a default - and the [sensitivity]
+    // section keeps whatever value it already had.
 }
 
 bool WriteValuesTo(const std::wstring& path, const ipc::Values& values) {
@@ -861,6 +1386,40 @@ bool WriteValuesTo(const std::wstring& path, const ipc::Values& values) {
     set(L"fov", L"enabled", values.fovEnabled ? L"1" : L"0");
     set(L"fov", L"value", FormatFloat(values.fovValue));
     set(L"fov", L"max", values.fovClampEnabled ? FormatFloat(values.fovClampValue) : L"0");
+
+    set(L"music", L"enabled", values.musicEnabled ? L"1" : L"0");
+    set(L"r_fullbright", L"enabled", values.fullbrightEnabled ? L"1" : L"0");
+    set(L"cg_draw2D", L"enabled", values.hudEnabled ? L"1" : L"0");
+    set(L"cg_drawGun", L"enabled", values.gunEnabled ? L"1" : L"0");
+    set(L"r_fog", L"enabled", values.fogEnabled ? L"1" : L"0");
+    set(L"r_filmTweakEnable", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+
+    // The viewmodel offsets: three sections, one shared enabled flag.
+    set(L"cg_gun_x", L"enabled", values.moveGunEnabled ? L"1" : L"0");
+    set(L"cg_gun_x", L"value", FormatFloat(values.gunX));
+    set(L"cg_gun_y", L"enabled", values.moveGunEnabled ? L"1" : L"0");
+    set(L"cg_gun_y", L"value", FormatFloat(values.gunY));
+    set(L"cg_gun_z", L"enabled", values.moveGunEnabled ? L"1" : L"0");
+    set(L"cg_gun_z", L"value", FormatFloat(values.gunZ));
+
+    // The film tweak's scalars: written whether or not the grade is on, so the
+    // values are kept for next time - the enabled flag is what decides whether
+    // they are applied.
+    set(L"r_filmTweakContrast", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+    set(L"r_filmTweakContrast", L"value", FormatFloat(values.filmContrast));
+    set(L"r_filmTweakBrightness", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+    set(L"r_filmTweakBrightness", L"value", FormatFloat(values.filmBrightness));
+    set(L"r_filmTweakDesaturation", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+    set(L"r_filmTweakDesaturation", L"value", FormatFloat(values.filmDesaturation));
+
+    // The tints go into the same section pattern; each section names the three
+    // colour components of its dvar in valueOffsets.
+    set(L"r_filmTweakLightTint", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+    set(L"r_filmTweakLightTint", L"value", FormatFloat(values.filmLightTint));
+    set(L"r_filmTweakMediumTint", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+    set(L"r_filmTweakMediumTint", L"value", FormatFloat(values.filmMediumTint));
+    set(L"r_filmTweakDarkTint", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
+    set(L"r_filmTweakDarkTint", L"value", FormatFloat(values.filmDarkTint));
 
     set(L"general", L"toggleKey", FormatHex(values.toggleKey));
 
@@ -878,11 +1437,17 @@ bool SaveValues(State& state, std::wstring& error) {
         return false;
     }
 
+    // closeWithGame is a launcher setting rather than a game cvar, so it is not
+    // part of ipc::Values and is written here instead.
+    const std::wstring closeWithGame = state.closeWithGame ? L"1" : L"0";
+    app::SetIniValue(state.iniPath, L"general", L"closeWithGame", closeWithGame);
+
     // Keep the copy next to the EXE in step as well. It is the file the user
     // sees, and it is copied over the working copy on every start - so a change
     // that only reached the working copy would be undone by the next run.
     if (::GetFileAttributesW(state.nextToExeIniPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
         WriteValuesTo(state.nextToExeIniPath, state.values);
+        app::SetIniValue(state.nextToExeIniPath, L"general", L"closeWithGame", closeWithGame);
     }
     return true;
 }
@@ -952,7 +1517,6 @@ DWORD WINAPI WorkerProc(LPVOID parameter) {
         }
     }
 
-    const int closeWithGame = app::IniInt(s.iniPath, L"general", L"closeWithGame", 1);
     const HANDLE process = ::OpenProcess(SYNCHRONIZE, FALSE, game.pid);
 
     for (;;) {
@@ -999,7 +1563,9 @@ DWORD WINAPI WorkerProc(LPVOID parameter) {
                 }
 
                 PostStatus(s, status);
-                if (closeWithGame != 0) {
+                // Read now rather than when the wait started: the box is in the
+                // window, so it can be ticked while the game is already running.
+                if (app::IniInt(s.iniPath, L"general", L"closeWithGame", 1) != 0) {
                     ::PostMessageW(s.dialog, WM_CLOSE, 0, 0);
                 }
                 break;
@@ -1031,27 +1597,21 @@ void OnApply(HWND dialog, State& state) {
                  L"injected, or on the next launch.";
     }
 
-    // Sensitivity is the one setting that cannot be done by writing memory at run
-    // time: the game copies it into the player profile when it starts and the
-    // aiming code reads the profile, which is why the dvar alone does nothing. So
-    // it goes into the game's own settings file as well - the supported path, and
-    // the one that needs the next launch.
+    // Sensitivity is live like everything else - the mouse-look code reads the
+    // cvar value every frame - but the game's own settings file is written too,
+    // because that is what keeps the value set on a launch without the unlocker.
+    // The game reloads it at startup and saves its own copy over it on exit.
     if (state.values.sensitivityEnabled != 0 && !state.gameDirectory.empty()) {
         const bool multiplayer = _wcsicmp(state.gameName.c_str(), L"iw4mp.exe") == 0;
         const std::wstring path = app::GameConfigPath(state.gameDirectory, state.gameName);
 
         if (app::SetGameConfigValue(path, L"sensitivity",
                                     FormatFloat(state.values.sensitivityValue))) {
-            status += std::wstring(L"  Sensitivity written to players\\") +
+            status += std::wstring(L"  Also written to players\\") +
                       (multiplayer ? L"config_mp.cfg" : L"config.cfg") +
-                      L"; it applies the next time the game starts.";
-            if (!state.gameDirectory.empty()) {
-                // The game is running, and it saves its own settings over that
-                // file - so say that the value is written again when it closes,
-                // otherwise this looks like it did nothing.
-                status += L"  The game is running and will overwrite that file with its own "
-                          L"value, so it is written again once the game closes.";
-            }
+                      L", so the value stays set when the unlocker is not running."
+                      L"  The game saves its own settings over that file as it closes; the "
+                      L"unlocker writes the line again afterwards.";
         } else {
             status += L"  ! The game's own settings file could not be updated.";
         }
@@ -1079,19 +1639,26 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         // the colours the edit control asks its parent for.
         ::SetWindowTheme(::GetDlgItem(dialog, kIdFpsValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdFovValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdGunXValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdGunYValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdGunZValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmContrastValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmBrightnessValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmDesaturationValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmLightTintValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmMediumTintValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmDarkTintValue), L"DarkMode_CFD", nullptr);
 
-        // The cards are painted by the window itself, so their rectangles have to
-        // be converted from dialog units into pixels now that the font is known.
-        const RECT cardUnits[4] = {
-            {10, 20, 290, 88},   // frame rate cap
-            {10, 94, 290, 182},  // field of view
-            {10, 188, 290, 244}, // mouse sensitivity
-            {10, 250, 290, 286}, // toggle key
-        };
-        for (int i = 0; i < 4; ++i) {
-            g_cards[i] = cardUnits[i];
-            ::MapDialogRect(dialog, &g_cards[i]);
-        }
+        // The cards are painted by the window itself and the two collapsible ones
+        // move, so the template is measured here and the rectangles are worked out
+        // in ApplyLayout, once the saved values have been read.
+        //
+        // There is no mouse sensitivity card, and that is deliberate: writing the
+        // cvar was measured not to change the aim in game, so a slider for it
+        // promised something that did not happen. The [sensitivity] section is
+        // still in the config and still applied, so anyone who wants to try it
+        // again can set it by hand without touching any code.
+        SnapshotLayout(dialog);
 
         const HFONT base = reinterpret_cast<HFONT>(::SendMessageW(dialog, WM_GETFONT, 0, 0));
         LOGFONTW logFont{};
@@ -1100,15 +1667,27 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
             g_headerFont = ::CreateFontIndirectW(&logFont);
         }
         if (g_headerFont != nullptr) {
+            // Every card title, including the three that were split out of the
+            // old catch-all card.
             ::SendDlgItemMessageW(dialog, kIdFpsHeader, WM_SETFONT,
                                   reinterpret_cast<WPARAM>(g_headerFont), TRUE);
             ::SendDlgItemMessageW(dialog, kIdFovHeader, WM_SETFONT,
                                   reinterpret_cast<WPARAM>(g_headerFont), TRUE);
-            ::SendDlgItemMessageW(dialog, kIdToggleHeader, WM_SETFONT,
+            ::SendDlgItemMessageW(dialog, kIdViewModelHeader, WM_SETFONT,
+                                  reinterpret_cast<WPARAM>(g_headerFont), TRUE);
+            ::SendDlgItemMessageW(dialog, kIdFilmHeader, WM_SETFONT,
+                                  reinterpret_cast<WPARAM>(g_headerFont), TRUE);
+            ::SendDlgItemMessageW(dialog, kIdOtherHeader, WM_SETFONT,
                                   reinterpret_cast<WPARAM>(g_headerFont), TRUE);
         }
 
         SyncControls(dialog, *state);
+
+        // Now that the saved values are in: fold away whatever is switched off,
+        // and size the window around what is left. Doing it before the window is
+        // shown means it never appears at the wrong height.
+        ApplyLayout(dialog, *state);
+        CentreOnMonitor(dialog);
         SetControlText(dialog, kIdStatus, L"Looking for the game...");
 
         state->worker = ::CreateThread(nullptr, 0, &WorkerProc, state, 0, nullptr);
@@ -1139,7 +1718,12 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         const HDC dc = reinterpret_cast<HDC>(wparam);
         const HWND control = reinterpret_cast<HWND>(lparam);
         const int id = ::GetDlgCtrlID(control);
-        const bool header = (id == kIdFpsHeader || id == kIdFovHeader || id == kIdToggleHeader);
+        // Every card title takes the accent colour. The list used to name the
+        // old catch-all card's title instead of the three that were split out of
+        // it, so those three painted in the same dim grey as body text.
+        const bool header = (id == kIdFpsHeader || id == kIdFovHeader ||
+                             id == kIdViewModelHeader || id == kIdFilmHeader ||
+                             id == kIdOtherHeader);
         ::SetBkMode(dc, TRANSPARENT);
         ::SetTextColor(dc, header ? kAccent : kTextDim);
         return reinterpret_cast<INT_PTR>(g_cardBrush);
@@ -1170,9 +1754,41 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
             DrawCheckbox(item->hDC, item->rcItem, L"Raise the engine's 80-degree clamp",
                          IsChecked(*state, kIdFovClamp), focused, disabled);
             return TRUE;
-        case kIdSensEnable:
-            DrawCheckbox(item->hDC, item->rcItem, L"Change the mouse sensitivity",
-                         IsChecked(*state, kIdSensEnable), focused, disabled);
+        case kIdMusicEnable:
+            DrawCheckbox(item->hDC, item->rcItem, L"Mute the music",
+                         IsChecked(*state, kIdMusicEnable), focused, disabled);
+            return TRUE;
+        case kIdFullbrightEnable:
+            DrawCheckbox(item->hDC, item->rcItem, L"Fullbright world",
+                         IsChecked(*state, kIdFullbrightEnable), focused, disabled);
+            return TRUE;
+        case kIdHudEnable:
+            DrawCheckbox(item->hDC, item->rcItem, L"Hide the HUD",
+                         IsChecked(*state, kIdHudEnable), focused, disabled);
+            return TRUE;
+        case kIdGunEnable:
+            DrawCheckbox(item->hDC, item->rcItem, L"Hide the weapon model",
+                         IsChecked(*state, kIdGunEnable), focused, disabled);
+            return TRUE;
+        case kIdFogEnable:
+            DrawCheckbox(item->hDC, item->rcItem, L"Disable the fog",
+                         IsChecked(*state, kIdFogEnable), focused, disabled);
+            return TRUE;
+        case kIdFilmTweakEnable:
+            // The two expandable cards draw a triangle as well: without it
+            // there is nothing to say the rows exist at all.
+            DrawExpandableCheckbox(item->hDC, item->rcItem, L"Enable the film tweak",
+                                   IsChecked(*state, kIdFilmTweakEnable), state->filmTweakOn,
+                                   focused, disabled);
+            return TRUE;
+        case kIdMoveGunEnable:
+            DrawExpandableCheckbox(item->hDC, item->rcItem, L"Move the viewmodel",
+                                   IsChecked(*state, kIdMoveGunEnable), state->moveGunOn,
+                                   focused, disabled);
+            return TRUE;
+        case kIdCloseWithGame:
+            DrawCheckbox(item->hDC, item->rcItem, L"Close with the game",
+                         IsChecked(*state, kIdCloseWithGame), focused, disabled);
             return TRUE;
         case kIdApply:
             DrawButton(item->hDC, item->rcItem, L"Apply & save", true,
@@ -1192,12 +1808,24 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         // Apply, so a drag never leaves the game half-changed.
         const int id = static_cast<int>(wparam);
         const int position = static_cast<int>(lparam);
-        if (id == kIdSensSlider) {
-            SetControlText(dialog, kIdSensValue, FormatHundredths(position));
-        } else {
-            SetControlText(dialog, id == kIdFpsSlider ? kIdFpsValue : kIdFovValue,
-                           FormatInt(position));
-        }
+        // The viewmodel offsets and the film tweak's scalars are decimals and
+        // keep their boxes in hundredths; the frame cap and the field of view are
+        // whole numbers.
+        const int box = id == kIdGunXSlider           ? kIdGunXValue
+                        : id == kIdGunYSlider         ? kIdGunYValue
+                        : id == kIdGunZSlider         ? kIdGunZValue
+                        : id == kIdFilmContrastSlider ? kIdFilmContrastValue
+                        : id == kIdFilmBrightnessSlider   ? kIdFilmBrightnessValue
+                        : id == kIdFilmDesaturationSlider ? kIdFilmDesaturationValue
+                        : id == kIdFilmLightTintSlider ? kIdFilmLightTintValue
+                        : id == kIdFilmMediumTintSlider ? kIdFilmMediumTintValue
+                        : id == kIdFilmDarkTintSlider ? kIdFilmDarkTintValue
+                        : (id == kIdFpsSlider ? kIdFpsValue : kIdFovValue);
+        const bool decimal = id == kIdGunXSlider || id == kIdGunYSlider || id == kIdGunZSlider ||
+                             id == kIdFilmContrastSlider || id == kIdFilmBrightnessSlider ||
+                             id == kIdFilmDesaturationSlider || id == kIdFilmLightTintSlider ||
+                             id == kIdFilmMediumTintSlider || id == kIdFilmDarkTintSlider;
+        SetControlText(dialog, box, decimal ? FormatHundredths(position) : FormatInt(position));
         return TRUE;
     }
 
@@ -1219,29 +1847,83 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         const int notification = HIWORD(wparam);
 
         if (id == kIdFpsEnable || id == kIdFovEnable || id == kIdFovClamp ||
-            id == kIdSensEnable) {
+            id == kIdMusicEnable || id == kIdFullbrightEnable || id == kIdHudEnable ||
+            id == kIdGunEnable || id == kIdFogEnable || id == kIdFilmTweakEnable ||
+            id == kIdMoveGunEnable || id == kIdCloseWithGame) {
             if (notification == BN_CLICKED) {
                 bool* field = CheckState(*state, id);
                 if (field != nullptr) {
                     *field = !*field;
                 }
                 UpdateEnabledState(dialog, *state);
+                if (id == kIdMoveGunEnable || id == kIdFilmTweakEnable) {
+                    // One of the two collapsible cards: show or hide its rows and
+                    // resize the window around whatever is left.
+                    ApplyLayout(dialog, *state);
+                }
                 ::InvalidateRect(::GetDlgItem(dialog, id), nullptr, TRUE);
             }
             return TRUE;
         }
 
-        if (id == kIdFpsValue || id == kIdFovValue || id == kIdSensValue) {
+        if (id == kIdFpsValue || id == kIdFovValue || id == kIdGunXValue ||
+            id == kIdGunYValue || id == kIdGunZValue || id == kIdFilmContrastValue ||
+            id == kIdFilmBrightnessValue || id == kIdFilmDesaturationValue ||
+            id == kIdFilmLightTintValue || id == kIdFilmMediumTintValue ||
+            id == kIdFilmDarkTintValue) {
             if (notification == EN_KILLFOCUS) {
                 const std::wstring typed = ControlText(dialog, id);
-                if (id == kIdSensValue) {
-                    // Typed as a decimal - "3.45" - and folded into hundredths.
+                if (id != kIdFpsValue && id != kIdFovValue) {
+                    // Typed as a decimal - "1.25" - and folded into hundredths.
+                    // Every one of these has its own range, so the slider it
+                    // belongs to is looked up along with the bounds.
+                    int slider = kIdGunXSlider;
+                    int low = kGunMin;
+                    int high = kGunMax;
+                    switch (id) {
+                    case kIdGunYValue: slider = kIdGunYSlider; break;
+                    case kIdGunZValue: slider = kIdGunZSlider; break;
+                    case kIdFilmContrastValue:
+                        slider = kIdFilmContrastSlider;
+                        low = kContrastMin;
+                        high = kContrastMax;
+                        break;
+                    case kIdFilmBrightnessValue:
+                        slider = kIdFilmBrightnessSlider;
+                        low = kBrightnessMin;
+                        high = kBrightnessMax;
+                        break;
+                    case kIdFilmDesaturationValue:
+                        slider = kIdFilmDesaturationSlider;
+                        low = kDesaturationMin;
+                        high = kDesaturationMax;
+                        break;
+                    case kIdFilmLightTintValue:
+                        slider = kIdFilmLightTintSlider;
+                        low = kTintMin;
+                        high = kTintMax;
+                        break;
+                    case kIdFilmMediumTintValue:
+                        slider = kIdFilmMediumTintSlider;
+                        low = kTintMin;
+                        high = kTintMax;
+                        break;
+                    case kIdFilmDarkTintValue:
+                        slider = kIdFilmDarkTintSlider;
+                        low = kTintMin;
+                        high = kTintMax;
+                        break;
+                    default:
+                        break;
+                    }
                     const int clamped = ClampInt(
-                        static_cast<int>(::wcstod(typed.c_str(), nullptr) * 100.0 + 0.5),
-                        kSensMin, kSensMax);
-                    SetSliderPosition(dialog, kIdSensSlider, clamped);
+                        ToHundredths(static_cast<float>(::wcstod(typed.c_str(), nullptr))), low,
+                        high);
+                    SetSliderPosition(dialog, slider, clamped);
                     SetControlText(dialog, id, FormatHundredths(clamped));
                 } else {
+                    // Typed as a whole number, then clamped to the slider's range
+                    // so the two never disagree.
                     const bool isFps = (id == kIdFpsValue);
                     const int clamped =
                         ClampInt(static_cast<int>(::wcstol(typed.c_str(), nullptr, 10)),
