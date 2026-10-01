@@ -1,6 +1,6 @@
 # MW2 (2009) x64 FPS unlocker
 
-### Download `MW2Unlocker.exe` & `unlocker.ini`
+### Download `MW2Unlocker.exe`
 
 Start MW2, then run:
 
