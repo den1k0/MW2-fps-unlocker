@@ -392,12 +392,27 @@ def cached_dvar_pointer(pe, site_rva):
     """The static a registration site caches the returned dvar_t* in.
 
     A registration is `lea rcx, [name]; call Dvar_Register...; mov [static],
-    rax`, so the 8-byte store just after the call is the cache. Finding it is
-    what makes the rest possible: from then on that one dvar can be followed
+    rax`, so the store to look for is the first one *after the call*. Finding it
+    is what makes the rest possible: from then on that one dvar can be followed
     around the binary by address alone, without knowing anything about the dvar
     pool it lives in.
+
+    The call is not a detail. The integer registrar takes flags in r8d and calls
+    almost immediately, but the float one takes its default, minimum and maximum
+    in xmm1-xmm3 and takes several instructions to set up - and the previous
+    cvar's store lands in the middle of that. Searching from the name alone then
+    reports the neighbouring dvar, which is how a whole family of glow tweaks
+    appeared to share one address.
     """
-    for insn in instructions(pe, site_rva, 10):
+    after_call = None
+    for insn in instructions(pe, site_rva, 14):
+        if insn.mnemonic == "call":
+            after_call = insn.address + insn.size
+            break
+    if after_call is None:
+        return None
+
+    for insn in instructions(pe, after_call - pe.image_base, 8):
         if insn.mnemonic != "mov" or len(insn.operands) != 2:
             continue
         dest, source = insn.operands
