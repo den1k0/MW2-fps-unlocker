@@ -15,7 +15,7 @@ fullbright, the HUD, the weapon model and the fog - together with the in-game
 hotkey and a box for whether the window closes when the game does.
 
 Change what you want, then press **Apply && save**: while the game is injected the change lands immediately,
-and if it is not running yet the value is saved to `unlocker.ini` and applied when
+and if it is not running yet the value is saved to `unlocker.ini` in `%LOCALAPPDATA%` and applied when
 the unlocker is injected.
 
 Press **F6** in game to toggle the patches on and off - or whatever key the
