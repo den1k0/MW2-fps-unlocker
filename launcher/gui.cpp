@@ -3083,14 +3083,22 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
             state->updateAvailable = false;
             SetCheckLabel(dialog, L"Could not check - " + error);
         } else if (published > local) {
-            // The label is the invitation: the next click opens the page, and it
-            // is kept short enough to fit the button without clipping.
+            // The label is the invitation: the next click opens the page. It is
+            // kept short because the button is no wider than its text.
             state->updateAvailable = true;
             SetCheckLabel(dialog, L"Update build " + std::to_wstring(published) +
                                       L" - click to open");
-        } else {
+        } else if (published == local) {
             state->updateAvailable = false;
             SetCheckLabel(dialog, L"Up to date (build " + std::to_wstring(local) + L")");
+        } else {
+            // Ahead of what has been published - a build of your own, or the
+            // repository's number has not caught up with it. "Up to date" here
+            // would hide which number the repository is actually on, and that is
+            // the one thing this button exists to say.
+            state->updateAvailable = false;
+            SetCheckLabel(dialog, L"You have build " + std::to_wstring(local) +
+                                      L"; published " + std::to_wstring(published));
         }
         return TRUE;
     }

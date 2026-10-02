@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <winhttp.h>
 
+#include <cstdio>
 #include <string>
 
 namespace {
@@ -17,6 +18,10 @@ const wchar_t* const kPath = L"/den1k0/MW2-fps-unlocker/main/version.txt";
 // five seconds per stage is generous rather than tight.
 const int kTimeoutMs = 5000;
 
+// The path to the published build number, and the host it lives on. The query
+// string added at the bottom of LatestBuild is what stops a stale copy being
+// served; see the note there.
+//
 // The first run of digits in the file. version.txt is one number on one line,
 // but there is no reason to be strict about whitespace or a trailing newline.
 // Returns -1 when there is no digit at all.
@@ -62,15 +67,32 @@ int update::LatestBuild(std::wstring& error) {
             break;
         }
 
-        request = ::WinHttpOpenRequest(connect, L"GET", kPath, nullptr, WINHTTP_NO_REFERER,
-                                       WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+        // Three things keep the answer current, because a stale one is
+        // indistinguishable from a broken button: a check made just after a
+        // release reported the previous number and said "up to date".
+        //
+        //   - the query string gives the CDN a URL it cannot have answered
+        //     before; raw.githubusercontent.com caches every response for five
+        //     minutes (Cache-Control: max-age=300) and answers the plain path
+        //     from its edge;
+        //   - WINHTTP_FLAG_REFRESH is the same trick at the WinHTTP end, which
+        //     keeps a copy of its own;
+        //   - and the header says it in the request as well, for anything in
+        //     between that is listening.
+        wchar_t path[128] = {};
+        ::swprintf_s(path, ARRAYSIZE(path), L"%s?cb=%I64u", kPath,
+                     static_cast<unsigned long long>(::GetTickCount64()));
+
+        request = ::WinHttpOpenRequest(connect, L"GET", path, nullptr, WINHTTP_NO_REFERER,
+                                       WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                       WINHTTP_FLAG_SECURE | WINHTTP_FLAG_REFRESH);
         if (request == nullptr) {
             error = L"could not reach GitHub";
             break;
         }
 
-        if (!::WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        if (!::WinHttpSendRequest(request, L"Cache-Control: no-cache\r\n",
+                                  static_cast<DWORD>(-1), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
             !::WinHttpReceiveResponse(request, nullptr)) {
             error = L"could not reach GitHub";
             break;
