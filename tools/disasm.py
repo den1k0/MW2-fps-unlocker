@@ -445,6 +445,25 @@ def dvar_report(pe, name):
         return
     print("  name string at rva 0x%X" % name_rva)
 
+    # A pointer to the name is not on its own a dvar. Anything that locates a
+    # cvar by scanning for one - which is what the unlocker does at run time, and
+    # what the runtime addresses of the pool make necessary - can land on a
+    # different structure that also begins with that pointer. This build keeps
+    # such a table for r_glow: {&name, 0, 0, {&string, index, flag}...}, sitting
+    # at a lower address than the real dvar, so a first-match scan finds it and a
+    # write through it clobbers a pointer. Listing every image pointer to the
+    # name makes that trap visible before anything is written to it.
+    needle = struct.pack("<Q", pe.image_base + name_rva)
+    offset = 0
+    while True:
+        offset = pe.data.find(needle, offset)
+        if offset < 0:
+            break
+        rva = pe.rva_of_offset(offset)
+        if rva is not None and not pe.is_code(pe.image_base + rva):
+            print("  ! image pointer to the name at rva 0x%X - a structure, not the dvar" % rva)
+        offset += 1
+
     sites, _ = references(pe, md, pe.image_base + name_rva)
     print("  %d reference(s) to the name string" % len(sites))
 

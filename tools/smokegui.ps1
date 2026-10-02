@@ -11,6 +11,10 @@
 #   powershell -NoProfile -File smokegui.ps1 -Exe build\Release\MW2Unlocker.exe
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -WaitSeconds 66 -ClickApply
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -Click 1031,1023
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckDot
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckNote
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckUpdate
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -SelectProfile 2 -ClickApply
 #
 # The top edges are the interesting part of the listing: the collapsible cards
 # pull everything below them up, so a diff of two runs says whether the layout
@@ -29,7 +33,28 @@ param(
     # int[] so it can be passed from a cmd prompt as well as from PowerShell:
     # cmd hands over "1031,1023" and PowerShell's number conversion would read
     # that as one gigantic id.
-    [string]$Click = ''
+    [string]$Click = '',
+    # Choose this profile slot (1..3) in the box on the top strip, the way a user
+    # picking it from the dropdown would: the selection is set and then the
+    # notification the window acts on is sent, because CB_SETCURSEL on its own is
+    # silent.
+    [int]$SelectProfile = 0,
+    # Read the status indicator back out of the window by sampling its pixels.
+    # It is not a control - the window paints it - so this is the only way to
+    # prove it is drawn at all.
+    [switch]$CheckDot,
+    # Print the sliders' positions, before and after any -Click. The sliders keep
+    # their value in the control itself, so this is the only way to see whether a
+    # switch threw one of them somewhere - which is invisible in a listing of
+    # control rectangles.
+    [switch]$DumpSliders,
+    # Check that the note above the first card really did get the smaller font.
+    # The control listing cannot show a font, so the two handles are compared.
+    [switch]$CheckNote,
+    # Click "Check for updates" and read its label back. The check runs on its
+    # own thread and only replaces the label when GitHub has answered, so this
+    # waits for it to stop saying "Checking" - the label is the whole result.
+    [switch]$CheckUpdate
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,8 +79,22 @@ public static extern bool IsWindowVisible(System.IntPtr window);
 public static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
 [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
 public static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+[System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr SendMessageText(System.IntPtr window, uint message, System.IntPtr wparam, string lparam);
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern bool GetWindowRect(System.IntPtr window, out RECT rect);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool GetClientRect(System.IntPtr window, out RECT rect);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool ScreenToClient(System.IntPtr window, ref POINT point);
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct POINT { public int x; public int y; }
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern System.IntPtr GetDC(System.IntPtr window);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern int ReleaseDC(System.IntPtr window, System.IntPtr dc);
+[System.Runtime.InteropServices.DllImport("gdi32.dll")]
+public static extern uint GetPixel(System.IntPtr dc, int x, int y);
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct RECT { public int left; public int top; public int right; public int bottom; }
 '@
@@ -68,6 +107,24 @@ $KIdApply = 1012
 $KIdSensEnable = 1018
 $KIdSensSlider = 1019
 $KIdToggleKey = 1016
+# The note above the first card, which is given a smaller font than the rest.
+$KIdNote = 1083
+# The profile box on the top strip.
+$KIdProfileCombo = 1092
+# "Check for updates", on its own row under the build number.
+$KIdCheckUpdates = 1094
+
+# WM_COMMAND, and the messages that drive the profile box: read it back, set the
+# selection, then tell the window it changed.
+$WmCommand = 0x0111
+$CbGetCount = 0x0146
+$CbGetCurSel = 0x0147
+$CbGetLbText = 0x0149
+$CbSetCurSel = 0x014E
+$CbnSelChange = 1
+
+# WM_GETFONT, to read a control's font back out of it.
+$WmGetFont = 0x0031
 
 # Control messages used to drive the window from outside the process.
 $BmClick = 0x00F5
@@ -76,8 +133,15 @@ $WmLButtonDown = 0x0201
 
 # The slider is a custom control of the launcher's own, so it has its own
 # message for "set the position" instead of the trackbar's TBM_SETPOS
-# (launcher/gui.cpp, kMsgSliderSetPosition = WM_APP + 11).
+# (launcher/gui.cpp, kMsgSliderSetPosition = WM_APP + 11). Reading one back is
+# the matching WM_APP + 12.
 $SliderSetPosition = 0x8000 + 11
+$SliderGetPosition = 0x8000 + 12
+
+# The sliders worth watching: the frame cap, the three in the viewmodel card's
+# right-hand column (the two safe-area ones and the compass under them), and the
+# two testing ones.
+$SliderIds = @(1002, 1074, 1077, 1080, 1086, 1089)
 
 function Get-Text([IntPtr]$window) {
     $buffer = New-Object System.Text.StringBuilder 512
@@ -97,10 +161,73 @@ function Get-Top([IntPtr]$window) {
     return $rect.top
 }
 
+# The left edge, converted to dialog units the way the template states them, so a
+# listing can be compared with generate_rc.cmake directly. 300 units across.
+function Get-LeftUnits([IntPtr]$window, [IntPtr]$dialog) {
+    $rect = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($window, [ref]$rect)
+    $client = New-Object 'W.U+RECT'
+    [void][W.U]::GetClientRect($dialog, [ref]$client)
+    if ($client.right -eq 0) { return 0 }
+    $perUnit = $client.right / 300.0
+    return [int][math]::Round(($rect.left - (Get-WindowLeft $dialog)) / $perUnit)
+}
+
+# The dialog's own screen position, needed to turn a child's screen rectangle back
+# into a position relative to the client area.
+function Get-WindowLeft([IntPtr]$window) {
+    $rect = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($window, [ref]$rect)
+    $client = New-Object 'W.U+RECT'
+    [void][W.U]::GetClientRect($window, [ref]$client)
+    return $rect.left + (($rect.right - $rect.left) - $client.right) / 2
+}
+
 function Get-Size([IntPtr]$window) {
     $rect = New-Object 'W.U+RECT'
     [void][W.U]::GetWindowRect($window, [ref]$rect)
     return ('{0}x{1}' -f ($rect.right - $rect.left), ($rect.bottom - $rect.top))
+}
+
+# What a slider is holding, read straight out of the control. A slider that was
+# moved by a switch's layout change shows up here; the rectangles in the listing
+# would not.
+function Show-Sliders([IntPtr]$window, [string]$when) {
+    Write-Output ("sliders ({0}):" -f $when)
+    foreach ($id in $SliderIds) {
+        $target = (Get-Children $window) | Where-Object { $_.Id -eq $id } | Select-Object -First 1
+        if ($target -eq $null) {
+            Write-Output ("  id {0,-5} (no such control)" -f $id)
+            continue
+        }
+        $position = [int][W.U]::SendMessage($target.Handle, $SliderGetPosition, [IntPtr]::Zero,
+                                            [IntPtr]::Zero)
+        Write-Output ("  id {0,-5} position {1,-6} class '{2}'" -f $id, $position, $target.Class)
+    }
+}
+
+# What the profile box is holding: the rows and which one is chosen. GetWindowText
+# cannot be trusted here - a combo answers it through its edit part, which a
+# dropdown list does not have - so the items are read with CB_GETLBTEXT.
+function Show-ProfileBox([IntPtr]$window, [string]$when) {
+    $combo = (Get-Children $window) | Where-Object { $_.Id -eq $KIdProfileCombo } |
+        Select-Object -First 1
+    if ($combo -eq $null) {
+        Write-Output ("profile box ({0}): FAIL - no control with id {1}" -f $when, $KIdProfileCombo)
+        return
+    }
+
+    $count = [int][W.U]::SendMessage($combo.Handle, $CbGetCount, [IntPtr]::Zero, [IntPtr]::Zero)
+    $selected = [int][W.U]::SendMessage($combo.Handle, $CbGetCurSel, [IntPtr]::Zero, [IntPtr]::Zero)
+    Write-Output ("profile box ({0}): {1} row(s), selection {2}" -f $when, $count, $selected)
+
+    $buffer = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(512)
+    for ($i = 0; $i -lt $count; $i++) {
+        $length = [int][W.U]::SendMessage($combo.Handle, $CbGetLbText, [IntPtr]$i, $buffer)
+        $text = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($buffer)
+        Write-Output ("  row {0}: length {1}, text '{2}'" -f $i, $length, $text)
+    }
+    [System.Runtime.InteropServices.Marshal]::FreeHGlobal($buffer)
 }
 
 # Children of one window, as objects, so callers can search by id or class.
@@ -170,13 +297,182 @@ Write-Output ("dialog: class='{0}' text='{1}' visible={2}" -f `
 
 Write-Output ("size:  {0}" -f (Get-Size $dialog))
 
+# Does the last row fit inside the client area? A dialog whose template is a few
+# units short of its content cuts the bottom edge off the buttons, and that is
+# invisible in a listing of top edges.
+$clientRect = New-Object 'W.U+RECT'
+[void][W.U]::GetClientRect($dialog, [ref]$clientRect)
+$lowestBottom = 0
+$lowestId = 0
+foreach ($probe in (Get-Children $dialog)) {
+    if (-not [W.U]::IsWindowVisible($probe.Handle)) { continue }
+    $r = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($probe.Handle, [ref]$r)
+    $p = New-Object 'W.U+POINT'
+    $p.x = 0
+    $p.y = $r.bottom
+    [void][W.U]::ScreenToClient($dialog, [ref]$p)
+    if ($p.y -gt $lowestBottom) {
+        $lowestBottom = $p.y
+        $lowestId = $probe.Id
+    }
+}
+$slack = $clientRect.bottom - $lowestBottom
+$mark = if ($slack -lt 0) { 'FAIL' } else { 'ok  ' }
+Write-Output ("fit:   {0} lowest control is {1} (id {2}) against a client of {3} - {4} px spare" -f `
+    $mark, $lowestBottom, $lowestId, $clientRect.bottom, $slack)
+
 $children = Get-Children $dialog
 foreach ($child in $children) {
     $shown = if ($child.Text.Length -gt 70) { $child.Text.Substring(0, 67) + '...' } else { $child.Text }
     $hidden = if ([W.U]::IsWindowVisible($child.Handle)) { '        ' } else { ' (hidden)' }
-    Write-Output ("   id {0,-5} top {1,-5} {2,-18} '{3}'{4}" -f `
-        $child.Id, (Get-Top $child.Handle), $child.Class, $shown, $hidden)
+    Write-Output ("   id {0,-5} left {1,-5} top {2,-5} {3,-18} '{4}'{5}" -f `
+        $child.Id, (Get-LeftUnits $child.Handle $dialog), (Get-Top $child.Handle), `
+        $child.Class, $shown, $hidden)
 }
+
+function Test-Dot([IntPtr]$window, [string]$when) {
+    # The indicator is painted, not a control, so the only evidence that it is
+    # there is the pixel. Its centre is 8.5 dialog units left of and 4.5 below the
+    # status control's top-left corner - the dot fills (12,532) to (23,543) and the
+    # status line starts at (26,533), so its centre (17.5,537.5) is that far from
+    # the corner. Keep those two numbers in step with kStatusDotUnits. The units
+    # come from the status line's own size, fixed by the template at 262x18.
+    $statusControl = (Get-Children $window) | Where-Object { $_.Id -eq $KIdStatus } |
+        Select-Object -First 1
+    $rect = New-Object 'W.U+RECT'
+    [void][W.U]::GetWindowRect($statusControl.Handle, [ref]$rect)
+
+    # The units come from the status line itself, whose size in dialog units the
+    # template fixes at 262 by 18. Deriving them from the client size instead would
+    # need the template's height, and that is not the height on screen while a card
+    # is folded away - which made every offset here read as if the window were
+    # permanently expanded.
+    $unitX = 4.0 * ($rect.right - $rect.left) / 262.0
+    $unitY = 8.0 * ($rect.bottom - $rect.top) / 18.0
+    $cx = [int][math]::Round($rect.left - (8.5 * $unitX / 4.0))
+    $cy = [int][math]::Round($rect.top + (4.5 * $unitY / 8.0))
+
+    # The dot is the only saturated thing in that part of the window: the
+    # background, the cards and the text are all but grey.
+    $dc = [W.U]::GetDC([IntPtr]::Zero)
+    $centre = [W.U]::GetPixel($dc, $cx, $cy)
+    $coloured = 0
+    for ($dy = -4; $dy -le 4; $dy++) {
+        for ($dx = -5; $dx -le 5; $dx++) {
+            $pixel = [W.U]::GetPixel($dc, $cx + $dx, $cy + $dy)
+            if ($pixel -eq 0xFFFFFFFF) { continue }
+            $r = [int]($pixel -band 0xFF)
+            $g = [int](($pixel -shr 8) -band 0xFF)
+            $b = [int](($pixel -shr 16) -band 0xFF)
+            if (([math]::Abs($r - $g) + [math]::Abs($g - $b)) -gt 60) { $coloured++ }
+        }
+    }
+
+    if ($coloured -eq 0) {
+        # Widen the search before giving up: a dot left behind somewhere else is a
+        # very different fault from one that was never painted, and the offset says
+        # which. 60 pixels either way is a whole card's worth of shift.
+        $stray = $null
+        for ($dy = -60; $dy -le 60 -and $stray -eq $null; $dy++) {
+            for ($dx = -60; $dx -le 60; $dx++) {
+                $pixel = [W.U]::GetPixel($dc, $cx + $dx, $cy + $dy)
+                if ($pixel -eq 0xFFFFFFFF) { continue }
+                $r = [int]($pixel -band 0xFF)
+                $g = [int](($pixel -shr 8) -band 0xFF)
+                $b = [int](($pixel -shr 16) -band 0xFF)
+                if (([math]::Abs($r - $g) + [math]::Abs($g - $b)) -gt 60) {
+                    $stray = @($dx, $dy, $r, $g, $b)
+                    break
+                }
+            }
+        }
+        if ($stray -eq $null) {
+            Write-Output ("dot ({0}): FAIL - nothing coloured within 60px of screen ({1},{2})" -f `
+                $when, $cx, $cy)
+        } else {
+            Write-Output ("dot ({0}): FAIL - expected at ({1},{2}), found rgb({3},{4},{5}) {6},{7} away" -f `
+                $when, $cx, $cy, $stray[2], $stray[3], $stray[4], $stray[0], $stray[1])
+        }
+    } else {
+        $cr = [int]($centre -band 0xFF)
+        $cg = [int](($centre -shr 8) -band 0xFF)
+        $cb = [int](($centre -shr 16) -band 0xFF)
+        Write-Output ("dot ({0}): {1} coloured pixel(s) near screen ({2},{3}), centre rgb({4},{5},{6})" -f `
+            $when, $coloured, $cx, $cy, $cr, $cg, $cb)
+    }
+    # The box the status line sits in. Sampled just inside its bottom-left corner,
+    # then walked downwards until the colour changes - that is the box's bottom
+    # edge. The dot is at (12,532)-(23,543) and the status control starts at
+    # (26,533), so du 12 at y 553 is inside the box and clear of both. The box is
+    # meant to end at du 555, which is about three pixels further down.
+    $boxX = [int][math]::Round($rect.left - (14.0 * $unitX / 4.0))
+    $boxY = [int][math]::Round($rect.top + (20.0 * $unitY / 8.0))
+    $insidePixel = [W.U]::GetPixel($dc, $boxX, $boxY)
+    $ir = [int]($insidePixel -band 0xFF)
+    $ig = [int](($insidePixel -shr 8) -band 0xFF)
+    $ib = [int](($insidePixel -shr 16) -band 0xFF)
+
+    $span = 0
+    while ($span -lt 100) {
+        if ([W.U]::GetPixel($dc, $boxX, $boxY + $span) -ne $insidePixel) { break }
+        $span++
+    }
+    $endPixel = [W.U]::GetPixel($dc, $boxX, $boxY + $span)
+    $or = [int]($endPixel -band 0xFF)
+    $og = [int](($endPixel -shr 8) -band 0xFF)
+    $ob = [int](($endPixel -shr 16) -band 0xFF)
+
+    if ($ir -eq $or -and $ig -eq $og -and $ib -eq $ob) {
+        Write-Output ("box ({0}): FAIL - the same colour inside and out, rgb({1},{2},{3}) over {4}px" -f `
+            $when, $ir, $ig, $ib, $span)
+    } else {
+        Write-Output ("box ({0}): inside rgb({1},{2},{3}) for {4}px, outside rgb({5},{6},{7})" -f `
+            $when, $ir, $ig, $ib, $span, $or, $og, $ob)
+    }
+
+    [void][W.U]::ReleaseDC([IntPtr]::Zero, $dc)
+}
+
+if ($CheckNote) {
+    # The note is given a font three quarters the size of the window's own. That
+    # cannot be seen in the control listing, and a font that failed to be created
+    # would simply leave the note at the standard size - so the two font handles
+    # are read back and compared. They must differ, and neither may be null.
+    $noteControl = $children | Where-Object { $_.Id -eq $KIdNote } | Select-Object -First 1
+    $baseFont = [W.U]::SendMessage($dialog, $WmGetFont, [IntPtr]::Zero, [IntPtr]::Zero)
+    if ($noteControl -eq $null) {
+        Write-Output ("note:  FAIL - no control with id {0}" -f $KIdNote)
+    } else {
+        $noteFont = [W.U]::SendMessage($noteControl.Handle, $WmGetFont, [IntPtr]::Zero, [IntPtr]::Zero)
+        if ($noteFont -eq [IntPtr]::Zero -or $noteFont -eq $baseFont) {
+            Write-Output ("note:  FAIL - '{0}' kept the window's font ({1})" -f `
+                $noteControl.Text, $baseFont)
+        } else {
+            Write-Output ("note:  ok - '{0}' has its own font {1}, against the window's {2}" -f `
+                $noteControl.Text, $noteFont, $baseFont)
+        }
+    }
+}
+
+if ($SelectProfile -gt 0) {
+    $combo = $children | Where-Object { $_.Id -eq $KIdProfileCombo } | Select-Object -First 1
+    if ($combo -eq $null) {
+        Write-Output ("FAIL: no control with id {0} - the profile box is missing" -f $KIdProfileCombo)
+    } else {
+        [void][W.U]::SendMessage($combo.Handle, $CbSetCurSel,
+                                 [IntPtr]($SelectProfile - 1), [IntPtr]::Zero)
+        $command = [IntPtr]((($CbnSelChange -shl 16) -bor $KIdProfileCombo))
+        [void][W.U]::SendMessage($dialog, $WmCommand, $command, $combo.Handle)
+        Start-Sleep -Milliseconds 300
+        Write-Output ("profile box: chose slot {0} (id {1})" -f $SelectProfile, $KIdProfileCombo)
+    }
+}
+
+if ($CheckDot) { Test-Dot $dialog 'at launch' }
+
+if ($DumpSliders) { Show-Sliders $dialog 'at launch' }
+if ($DumpSliders) { Show-ProfileBox $dialog 'at launch' }
 
 $clickIds = @()
 foreach ($piece in $Click.Split(',', [System.StringSplitOptions]::RemoveEmptyEntries)) {
@@ -201,6 +497,35 @@ if ($clickIds.Count -gt 0) {
     foreach ($child in (Get-Children $dialog)) {
         $mark = if ([W.U]::IsWindowVisible($child.Handle)) { 'shown' } else { 'hidden' }
         Write-Output ("   id {0,-5} top {1,-5} {2}" -f $child.Id, (Get-Top $child.Handle), $mark)
+    }
+
+    # The cards have moved, so the dot has moved with them - or it has not, which
+    # is exactly the failure this catches.
+    if ($CheckDot) { Test-Dot $dialog 'after the clicks' }
+
+    # And the sliders: a switch that resized the window must not have moved any of
+    # them. The compass is the one to watch - it shares the safe area's switch.
+    if ($DumpSliders) { Show-Sliders $dialog 'after the clicks' }
+    if ($DumpSliders) { Show-ProfileBox $dialog 'after the clicks' }
+}
+
+if ($CheckUpdate) {
+    $button = $children | Where-Object { $_.Id -eq $KIdCheckUpdates } | Select-Object -First 1
+    if ($button -eq $null) {
+        Write-Output ("FAIL: no control with id {0} - the update button is missing" -f $KIdCheckUpdates)
+    } else {
+        # The listing read the button's text once, when the window opened; the
+        # check replaces it, so every reading here goes back to the control.
+        Write-Output ("update button before: '{0}'" -f (Get-Text $button.Handle))
+        [void][W.U]::SendMessage($button.Handle, $BmClick, [IntPtr]::Zero, [IntPtr]::Zero)
+
+        $label = ''
+        for ($attempt = 0; $attempt -lt 24; $attempt++) {
+            Start-Sleep -Milliseconds 500
+            $label = Get-Text $button.Handle
+            if ($label -notmatch 'Checking') { break }
+        }
+        Write-Output ("update button after:  '{0}'" -f $label)
     }
 }
 

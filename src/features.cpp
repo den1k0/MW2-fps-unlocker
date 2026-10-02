@@ -119,9 +119,97 @@ const DvarPreset kPresets[] = {
     {"r_filmTweakLightTint", "r_filmTweakLightTint", true, "0x10,0x14,0x18", "1.1", "", ""},
     {"r_filmTweakMediumTint", "r_filmTweakMediumTint", true, "0x10,0x14,0x18", "0.9", "", ""},
     {"r_filmTweakDarkTint", "r_filmTweakDarkTint", true, "0x10,0x14,0x18", "0.7", "", ""},
+    // ---- the glow tweak --------------------------------------------------------
+    // The bloom the renderer wraps around everything bright, and the same
+    // dev-tweak shape as the film grade - one gate deeper. Out of the binary:
+    //
+    //     rva 0xBF629  mov  rax, [r_glow_allowed]      ; OR script-forced
+    //                  cmp  byte ptr [rax + 0x10], 0
+    //                  jne  <use the tweaked parameters>
+    //     rva 0x6365E  mov  rax, [r_glow]              ; the effect's own switch
+    //     rva 0x21471  mov  rax, [r_glowUseTweaks]    ; OUTER gate: skips the copy
+    //     rva 0x2147E  mov  rax, [r_glowTweakEnable]  ; INNER gate
+    //     rva 0x21489  ... and then the four parameters, in one block
+    //
+    // All three gates ship at 0, so the family is inert until every one of them
+    // is open - which is why the window has a single switch that writes all four
+    // rather than offering them separately.
+    {"r_glow_allowed", "r_glow_allowed", false, "0x10,0x20,0x30", "1", "", ""},
+    {"r_glow", "r_glow", false, "0x10,0x20,0x30", "1", "", ""},
+    {"r_glowUseTweaks", "r_glowUseTweaks", false, "0x10,0x20,0x30", "1", "", ""},
+    {"r_glowTweakEnable", "r_glowTweakEnable", false, "0x10,0x20,0x30", "1", "", ""},
+    // The parameters, defaulted to the values the engine registers them with so
+    // the sliders start where the game does. They go a long way past that, which
+    // is how the first attempt at this washed the screen out.
+    // Registered at 5 and 20, but the window starts lower: at those the bloom
+    // already washes the screen out, so 1 and 2 are the defaults here rather than
+    // the game's own values.
+    {"r_glowTweakRadius0", "r_glowTweakRadius0", true, "0x10,0x20,0x30", "1", "", ""},
+    {"r_glowTweakBloomIntensity0", "r_glowTweakBloomIntensity0", true, "0x10,0x20,0x30", "2", "", ""},
+    {"r_glowTweakBloomCutoff", "r_glowTweakBloomCutoff", true, "0x10,0x20,0x30", "0.5", "", ""},
+    {"r_glowTweakBloomDesaturation", "r_glowTweakBloomDesaturation", true, "0x10,0x20,0x30", "0",
+     "", ""},
+    // Two screen effects that need no gate at all. r_blur is "Dev tweak to blur
+    // the screen", registered as a float at 0 with a minimum of 0; r_blacklevel
+    // is "Black level (negative brightens output)", a float registered at 0
+    // between -0.99 and +0.99. Both are neutral at 0, so the value is the whole
+    // setting and the window offers them without a switch to open first.
+    {"r_blur", "r_blur", true, "0x10,0x20,0x30", "0", "", ""},
+    {"r_blacklevel", "r_blacklevel", true, "0x10,0x20,0x30", "0", "", ""},
     {"cg_gun_x", "cg_gun_x", true, "0x10,0x20,0x30", "0", "", ""},
     {"cg_gun_y", "cg_gun_y", true, "0x10,0x20,0x30", "0", "", ""},
     {"cg_gun_z", "cg_gun_z", true, "0x10,0x20,0x30", "0", "", ""},
+    // ---- the HUD safe area -----------------------------------------------------
+    // The fraction of the screen the 2D overlay is laid out within, so a smaller
+    // number pulls the HUD in towards the centre. Four floats, all between 0 and
+    // 1, registered together in one block (sub_F2BD0) and read together in
+    // another (sub_F2F10, one `movss xmmN, [rax + 0x10]` each):
+    //
+    //     safeArea_horizontal / _vertical             0.85  build the rectangles,
+    //                    read again in sub_F2D10 where they are scaled by the
+    //                    screen dimensions
+    //     safeArea_adjusted_horizontal / _vertical    1.00  the "user-adjustable"
+    //                    pair - what the game's own Options > Safe Area menu
+    //                    writes and what getadjustedsafearea* returns
+    //
+    // Nothing gates them, so the window's switch is its own; the defaults are the
+    // registered values, which is what the game already uses.
+    {"safeArea_horizontal", "safeArea_horizontal", true, "0x10,0x20,0x30", "0.85", "", ""},
+    {"safeArea_vertical", "safeArea_vertical", true, "0x10,0x20,0x30", "0.85", "", ""},
+    {"safeArea_adjusted_horizontal", "safeArea_adjusted_horizontal", true, "0x10,0x20,0x30", "1",
+     "", ""},
+    {"safeArea_adjusted_vertical", "safeArea_adjusted_vertical", true, "0x10,0x20,0x30", "1", "",
+     ""},
+    // compassSize: "Scale the compass", registered through the same float helper
+    // at 1.0 with 0 as its minimum and FLT_MAX as its maximum, read as a float
+    // from +0x10 in ten places. A HUD size like the safe area, so the window keeps
+    // it in the same column - but it has no gate of its own and does not ride that
+    // column's switch either: it is written and applied whenever the window saves,
+    // like r_blur, so unticking the safe area leaves the compass alone.
+    //
+    // The default here is 1, the engine's own value, and it must never be 0: a
+    // scale of zero collapses the compass geometry and brings the game down. The
+    // window will not offer 0 and ApplyLive floors the live value; a value typed
+    // into this file is the one way to reach it, which the config warns about.
+    {"compassSize", "compassSize", true, "0x10,0x20,0x30", "1", "", ""},
+    // ---- for testing -----------------------------------------------------------
+    // cg_drawCrosshair is an int registered at 1 ("Turn on weapon crosshair") and
+    // read as a byte over a block of HUD code, so it is written the way the other
+    // hide-switches are: the section's own enabled flag decides, and the value is
+    // the fixed 0 that turns it off.
+    {"cg_drawCrosshair", "cg_drawCrosshair", false, "0x10,0x20,0x30", "0", "", ""},
+    // timescale is the game's own clock, a float registered at 1.0; phys_gravity
+    // is "Physics gravity in units/sec^2." - the gravity on objects, not the
+    // player, who is g_gravity and has no dvar in this binary. Both are read as
+    // floats and both are written plainly, so the two sliders are what decides
+    // them.
+    //
+    // Gravity's default here is -800 rather than the registered 800: they are the
+    // same magnitude with the sign flipped, and -800 is the "moon" end of the
+    // range that this pair exists to try in a match. 800 is the engine's neutral
+    // value, so anyone who wants the game back as it was sets that.
+    {"timescale", "timescale", true, "0x10,0x20,0x30", "1", "", ""},
+    {"phys_gravity", "phys_gravity", true, "0x10,0x20,0x30", "-800", "", ""},
     // cg_fov: a FLOAT. The float at dvar+0x44 reads 80.0 and behaves like the
     // max-FOV clamp, so it is exposed as the optional `max=` key.
     {"fov", "cg_fov", true, "0x10,0x20,0x30", "90", "0x44", "max"},
@@ -200,6 +288,15 @@ struct Feature {
 
     // Set when this feature came from a preset (used to expand `max=`).
     const DvarPreset* preset = nullptr;
+
+    // Whether it is switched on. The config pass only builds features whose
+    // section says `enabled=1`, so for everything it pushes this is true - but the
+    // live path builds one for whatever setting the window sends, ticked or not,
+    // and WriteLiveFeature remembers the value either way. Apply() has to be able
+    // to tell the two apart: without this, the hotkey's off-and-on switched on
+    // every setting the window had ever mentioned, because all it does is rebuild
+    // the patcher from this list.
+    bool enabled = false;
 };
 
 Config g_config;
@@ -469,6 +566,50 @@ std::string HexBytes(const std::vector<uint8_t>& bytes) {
 //   2. scan for a pointer to that address.
 // Step 1 needs no addresses baked in, which is what makes the presets work in
 // both executables and survive every relaunch.
+//
+// Step 2 needs a second test, though, and this one is not academic: a name
+// pointer is not unique to a dvar_t. This build holds another structure whose
+// first field points at the string "r_glow" - at a lower address than the real
+// dvar, so a first-match scan finds it - and its value slot holds a pointer
+// rather than a number. Writing an integer over that pointer is what crashed
+// the game on a map load: the renderer dereferenced it later and found 0x1.
+//
+// So a candidate is only accepted if it behaves like the dvar it claims to be.
+// For the int and float types the value at +0x10 cannot be an address inside
+// the module: a real value is a small number whose upper half is zero, and the
+// stale bytes a recycled pool slot may leave behind cannot land there either
+// unless the value is upward of two billion, which nothing here ever writes.
+bool LooksLikeDvar(uintptr_t address, uintptr_t moduleBase, size_t moduleSize,
+                   const std::string& type, const char* name) {
+    uint8_t header[0x18] = {};
+    if (!meml::Read(address, header, sizeof(header))) {
+        return false;
+    }
+
+    const uint32_t kind = *reinterpret_cast<const uint32_t*>(header + 0x0C);
+    // 0 int, 1 float, 5/6 the other integer and counter forms, 8/9 strings and
+    // colours. Anything past that is not a dvar at all.
+    if (kind > 12) {
+        return false;
+    }
+
+    if (!IsDvarType(type)) {
+        return true; // nothing else is written through the value slot
+    }
+
+    uintptr_t value = 0;
+    std::memcpy(&value, header + 0x10, sizeof(value));
+    const bool pointsIntoTheModule = value >= moduleBase && value < moduleBase + moduleSize;
+    if (pointsIntoTheModule) {
+        mwlog::Line("features: '%s' skipped the structure at 0x%llX - its value slot holds a "
+                    "pointer into the module (0x%llX), so it is not a %s",
+                    name, static_cast<unsigned long long>(address),
+                    static_cast<unsigned long long>(value), type.c_str());
+        return false;
+    }
+    return true;
+}
+
 uintptr_t LocateDvar(const Feature& feature) {
     const std::wstring& module = FeatureModule(feature);
     const std::string moduleKey = Narrow(module);
@@ -538,7 +679,22 @@ uintptr_t LocateDvar(const Feature& feature) {
             continue;
         }
 
-        dvar = pattern::Find(base, size, bytes, mask);
+        // Every match of the pointer, not just the first: the first one may be
+        // the impostor described above, in which case the real dvar_t is further
+        // along. Nothing is written unless one of them passes the test.
+        uintptr_t searchFrom = base;
+        while (searchFrom < base + size) {
+            const uintptr_t found = pattern::Find(searchFrom, (base + size) - searchFrom, bytes, mask);
+            if (found == 0) {
+                break;
+            }
+            if (LooksLikeDvar(found, base, size, feature.type, feature.name.c_str())) {
+                dvar = found;
+                break;
+            }
+            searchFrom = found + 1;
+        }
+
         if (dvar != 0) {
             break;
         }
@@ -679,6 +835,11 @@ bool WriteLiveFeature(Feature& feature, bool enabled, double value) {
     }
     feature.patchMask.assign(feature.patchBytes.size(), true);
 
+    // And whether it is on, which is what Apply() reads when the hotkey switches
+    // the patches back on: the remembered bytes above are the *on* ones, so a
+    // setting switched off here has to be marked or it comes back with them.
+    feature.enabled = enabled;
+
     bool changed = false;
     for (const uintptr_t offset : feature.valueOffsets) {
         const std::string label = DvarLabel(feature, "", offset);
@@ -753,6 +914,10 @@ void features::Init(const std::wstring& configPath) {
             continue;
         }
 
+        // It reached this point, so its section was switched on: the ones that are
+        // not were skipped above.
+        feature.enabled = true;
+
         // A preset may carry a second, separate value: the clamp. It needs its
         // own feature because it writes a different number.
         if (feature.preset != nullptr && feature.preset->clampOffset[0] != '\0') {
@@ -787,8 +952,17 @@ bool features::Apply() {
 
     g_patcher = Patcher();
     bool anyAdded = false;
+    int applying = 0;
 
     for (const Feature& feature : g_features) {
+        // Only what is switched on. The list can hold a feature the window has
+        // mentioned and left unticked - the live path builds one for every preset
+        // section it is asked about - and applying it would switch the setting on.
+        if (!feature.enabled) {
+            continue;
+        }
+        ++applying;
+
         if (IsDvarType(feature.type)) {
             const uintptr_t dvar = LocateDvar(feature);
             if (dvar == 0) {
@@ -816,6 +990,11 @@ bool features::Apply() {
         }
     }
 
+    // The two counts, because "the patches are on" and "every setting the window
+    // ever mentioned is on" are different claims: the list can hold features that
+    // are switched off, and this is what says whether they were left alone.
+    mwlog::Line("features: applying %d of %zu feature(s)", applying, g_features.size());
+
     if (!anyAdded) {
         g_error = "no patches could be applied";
         return false;
@@ -833,7 +1012,7 @@ bool features::Apply() {
     // writes without error and still changes nothing on screen. The cache makes
     // this free: no rescanning.
     for (const Feature& feature : g_features) {
-        if (!IsDvarType(feature.type) || feature.valueOffsets.empty()) {
+        if (!feature.enabled || !IsDvarType(feature.type) || feature.valueOffsets.empty()) {
             continue;
         }
         const uintptr_t dvar = LocateDvar(feature);
@@ -946,9 +1125,62 @@ bool features::ApplyLive(const ipc::Values& values) {
     changed |= SetLive("r_filmTweakDarkTint", values.filmTweakEnabled != 0,
                        static_cast<double>(values.filmDarkTint));
 
+    // The glow tweak: one switch writes four gates and four values. Writing only
+    // the values would leave the whole family unread, which is exactly what the
+    // first attempt did.
+    changed |= SetLive("r_glow_allowed", values.glowEnabled != 0, 1.0);
+    changed |= SetLive("r_glow", values.glowEnabled != 0, 1.0);
+    changed |= SetLive("r_glowUseTweaks", values.glowEnabled != 0, 1.0);
+    changed |= SetLive("r_glowTweakEnable", values.glowEnabled != 0, 1.0);
+    changed |= SetLive("r_glowTweakRadius0", values.glowEnabled != 0,
+                       static_cast<double>(values.glowRadius));
+    changed |= SetLive("r_glowTweakBloomIntensity0", values.glowEnabled != 0,
+                       static_cast<double>(values.glowIntensity));
+    changed |= SetLive("r_glowTweakBloomCutoff", values.glowEnabled != 0,
+                       static_cast<double>(values.glowCutoff));
+    changed |= SetLive("r_glowTweakBloomDesaturation", values.glowEnabled != 0,
+                       static_cast<double>(values.glowDesaturation));
+
+    // Blur and black level have no gate to write, so they go in as plain values.
+    // Both are neutral at 0, which is what keeps a slider nobody has moved a
+    // no-op rather than a change.
+    changed |= SetLive("r_blur", true, static_cast<double>(values.blurValue));
+    changed |= SetLive("r_blacklevel", true, static_cast<double>(values.blackLevel));
+
     changed |= SetLive("cg_gun_x", values.moveGunEnabled != 0, static_cast<double>(values.gunX));
     changed |= SetLive("cg_gun_y", values.moveGunEnabled != 0, static_cast<double>(values.gunY));
     changed |= SetLive("cg_gun_z", values.moveGunEnabled != 0, static_cast<double>(values.gunZ));
+
+    // The HUD safe area: two plain values behind one switch. There is no gate to
+    // write - they are read whether or not they were changed - so the switch only
+    // decides whether the window writes them at all. Only the "adjusted" pair:
+    // the base pair that the game also registers moved nothing when it was tried,
+    // so it has sections in the config but no place in the window.
+    changed |= SetLive("safeArea_adjusted_horizontal", values.safeAreaEnabled != 0,
+                       static_cast<double>(values.safeAreaAdjustedH));
+    changed |= SetLive("safeArea_adjusted_vertical", values.safeAreaEnabled != 0,
+                       static_cast<double>(values.safeAreaAdjustedV));
+    // 0.1 rather than the engine's own minimum of 0: a scale of zero collapses the
+    // compass geometry and brings the game down, so the floor is enforced here as
+    // well as in the slider. A value from the config file goes through the presets
+    // rather than here, which is why the warning is repeated in the config.
+    //
+    // Gateless, and deliberately not tied to the safe area's switch even though it
+    // shares that column: with the two coupled, unticking the safe area handed the
+    // compass back to whatever value the game itself was holding.
+    const double compass = static_cast<double>(values.compassSize);
+    changed |= SetLive("compassSize", true, compass < 0.1 ? 0.1 : compass);
+
+    // The testing four. The crosshair is a hide-switch, so it is written only
+    // while it is ticked - crosshairEnabled 0 means the user asked for it hidden.
+    // The timescale and the gravity hang behind the window's "Tweak the server"
+    // switch: there is no cvar of their own to gate them, so that switch is the
+    // gate, and it starts off.
+    changed |= SetLive("cg_drawCrosshair", values.crosshairEnabled == 0, 0.0);
+    changed |= SetLive("timescale", values.serverEnabled != 0,
+                       static_cast<double>(values.timescale));
+    changed |= SetLive("phys_gravity", values.serverEnabled != 0,
+                       static_cast<double>(values.physGravity));
 
     changed |= SetLive("sensitivity", values.sensitivityEnabled != 0,
                        static_cast<double>(values.sensitivityValue));

@@ -50,7 +50,14 @@ inline constexpr std::uintptr_t kCopyDataMagic = 0x4D573255; // 'MW2U'
 // 7: added the viewmodel offsets.
 // 8: added the film tweak parameters.
 // 9: added the film tweak tints.
-inline constexpr std::uint32_t kProtocolVersion = 9;
+// 10: added the glow tweak parameters.
+// 11: added the blur and black level values.
+// 12: added the HUD safe area.
+// 13: dropped the base safe-area pair, which moved nothing in game.
+// 14: added the compass size, alongside the safe area.
+// 15: added the crosshair switch, timescale and phys_gravity.
+// 16: added the switch those last two hang behind.
+inline constexpr std::uint32_t kProtocolVersion = 16;
 
 // Everything the window can change. Mirrors the preset sections in the config.
 struct Values {
@@ -118,6 +125,85 @@ struct Values {
     float filmLightTint;     // r_filmTweakLightTint,  1.1 by default
     float filmMediumTint;    // r_filmTweakMediumTint, 0.9
     float filmDarkTint;      // r_filmTweakDarkTint,   0.7
+
+    // The glow tweak: the bloom the renderer puts around everything bright.
+    // It needs FOUR gates, not two - r_glow_allowed decides whether glow is
+    // permitted at all and ships at 0, then r_glowTweakEnable sits behind
+    // r_glowUseTweaks exactly as the film tweak does. One switch writes all
+    // four, because any one of them left at its default makes the rest inert.
+    std::int32_t glowEnabled; // r_glow_allowed + r_glow + r_glowUseTweaks + r_glowTweakEnable
+    // 1 and 2 rather than the 5 and 20 the engine registers: at those the bloom
+    // already washes the screen out, so the window starts lower than the game.
+    float glowRadius;         // r_glowTweakRadius0
+    float glowIntensity;      // r_glowTweakBloomIntensity0
+    float glowCutoff;         // r_glowTweakBloomCutoff,       0.5
+    float glowDesaturation;   // r_glowTweakBloomDesaturation,   0
+
+    // Two screen effects with no gate of their own: r_blur ("Dev tweak to blur
+    // the screen", registered at 0 with a minimum of 0) and r_blacklevel ("Black
+    // level (negative brightens output)", registered at 0 between -0.99 and
+    // +0.99). Both are neutral at 0, so there is nothing to switch - the window
+    // offers them as values and always writes them, and a slider left at zero
+    // does what the game does anyway.
+    float blurValue;          // r_blur
+    float blackLevel;         // r_blacklevel
+
+    // The HUD safe area: the fraction of the screen the 2D overlay is laid out
+    // within, so a smaller number pulls the whole HUD in towards the centre.
+    //
+    // The game registers four of these floats between 0 and 1, but only the
+    // "adjusted" pair is carried here. Both pairs were offered and tried; moving
+    // safeArea_horizontal or safeArea_vertical (the base pair, registered at
+    // 0.85) changed nothing that could be seen, while
+    // safeArea_adjusted_horizontal and _vertical (both 1.0 - the pair the game's
+    // own Options > Safe Area menu writes, and what the getadjustedsafearea*
+    // script functions return) did move the HUD. The base pair keeps its sections
+    // in the config, so a value set by hand there is still applied; the window
+    // neither reads nor writes them.
+    //
+    // The switch is the window's own - no cvar gates the pair - and the values
+    // are the registered defaults, so a slider nobody has moved writes what the
+    // game already had.
+    std::int32_t safeAreaEnabled;
+    float safeAreaAdjustedH;   // safeArea_adjusted_horizontal, 1.0
+    float safeAreaAdjustedV;   // safeArea_adjusted_vertical,   1.0
+
+    // compassSize: "Scale the compass", a float the engine registers at 1.0 with
+    // 0 as its minimum and FLT_MAX as its maximum, read as a float from +0x10 in
+    // ten places. It is a HUD size like the safe area, so it shares the switch
+    // above rather than carrying one of its own.
+    float compassSize;
+
+    // ---- for testing ---------------------------------------------------------
+    // Three more cvars the game reads, added to the window so they can be tried
+    // in a match. Each is written the way its own section already works rather
+    // than inventing a new shape for it:
+    //
+    //   crosshairEnabled  cg_drawCrosshair. An int, registered at 1 ("Turn on
+    //                     weapon crosshair", cached 0x809990), read once as
+    //                     `cmp byte ptr [rax + 0x10], 0` over a block of HUD
+    //                     code - so 0 hides the crosshair and anything else
+    //                     draws it. 0 means "hide it", which is the state the
+    //                     switch is named after.
+    //   timescale         A float registered at 1.0 and read as one (cached
+    //                     0x1D26580): the game's own clock. 1.0 is neutral.
+    //   serverEnabled     the window's "Tweak the server" switch. Both of the two
+    //                     values above are written only while it is on: unlike the
+    //                     other switches there is no cvar to gate behind, so this
+    //                     one decides on its own whether they are applied.
+    //
+    //   physGravity       phys_gravity, "Physics gravity in units/sec^2.", a
+    //                     float read by code (cached 0x1B53BE0). It is the
+    //                     gravity on objects rather than the player - the player
+    //                     one is `g_gravity`, which this binary does not have.
+    //                     The engine registers it at 800, which is neutral; the
+    //                     default here is -800, the same magnitude with the sign
+    //                     flipped, because that is the end of the range worth
+    //                     trying in a match.
+    std::int32_t crosshairEnabled; // 0 hides the crosshair
+    float timescale;               // 1.0 = the game's own speed
+    float physGravity;             // -800 for testing; the engine's 800 is neutral
+    std::int32_t serverEnabled;    // 0 leaves both of them alone
 };
 
 inline Values MakeDefault() {
@@ -160,6 +246,33 @@ inline Values MakeDefault() {
     values.filmLightTint = 1.1f;
     values.filmMediumTint = 0.9f;
     values.filmDarkTint = 0.7f;
+
+    // The glow tweak is off by default, like the other things that change the
+    // game rather than fix something, and its values are the registered ones.
+    values.glowEnabled = 0;
+    values.glowRadius = 1.0f;
+    values.glowIntensity = 2.0f;
+    values.glowCutoff = 0.5f;
+    values.glowDesaturation = 0.0f;
+
+    // The registered values, which are also the neutral ones.
+    values.blurValue = 0.0f;
+    values.blackLevel = 0.0f;
+
+    // Off by default, like the other things that change how the game looks, and
+    // with the values the engine registers.
+    values.safeAreaEnabled = 0;
+    values.safeAreaAdjustedH = 1.0f;
+    values.safeAreaAdjustedV = 1.0f;
+    values.compassSize = 1.0f;
+
+    // The crosshair starts as the game draws it - 1 - so the switch beside it is
+    // off, and the other two start at the values the engine registers, which are
+    // the neutral ones.
+    values.crosshairEnabled = 1;
+    values.timescale = 1.0f;
+    values.physGravity = -800.0f; // the testing default; 800 is the engine's neutral
+    values.serverEnabled = 0;     // off, so the testing pair is not applied until asked
     return values;
 }
 

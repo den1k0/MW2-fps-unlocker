@@ -12,11 +12,29 @@ YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 
 [preview]: https://github.com/den1k0/MW2-fps-unlocker/blob/main/docs/preview.png "Preview"
 
-A window opens with a slider and a checkbox for the frame cap and for the field of
-view, three sliders that move the first-person weapon, a film tweak card with six
-sliders of its own, and an **Other Settings** card holding five switches - music,
-fullbright, the HUD, the weapon model and the fog - together with the in-game
-hotkey and a box for whether the window closes when the game does.
+A window opens with a slider and a checkbox for the frame cap, a slider for the
+field of view, a viewmodel card whose left column moves the first-person weapon
+and whose right column adjusts the HUD safe area and the compass size, a film tweak
+card whose two columns carry six grade sliders on the left and the glow's four plus
+blur on the right, an **Other Settings** card holding six switches - music,
+fullbright, the HUD, the crosshair, the weapon model and the fog - together with
+the in-game hotkey and, on that same row, a box for whether the window closes when
+the game does, and a **Server** card below it holding the two testing sliders — the
+timescale and the physics gravity, which starts at -800 — behind one switch that
+gates both of them and stays folded until it is ticked. The viewmodel, film tweak
+and Server cards all fold away like that, so the window is only as tall as the
+settings it is showing. The strip along the top
+carries the profile box as well: a dropdown of three slots, kept as files under
+`%LOCALAPPDATA%\MW2Unlocker\profiles`. The window opens on Profile 1 and loads it
+if it exists; choosing another loads that one, and **Apply & save** stores what the
+window shows into the slot it is on, so a whole set of settings can be put back in
+one go. A line at the
+top warns that some settings only take effect once you rejoin a match, a small dot
+beside the status line at the bottom turns green once the game is answering, yellow
+while it is still looking for it, and red if something failed, and the build number
+sits beside the buttons — stamped afresh on every build — so you can say which
+version you are on, with **Check for updates** under it: it asks the repository
+whether a newer build has been published and opens the download page if one has.
 
 Change what you want, then press **Apply && save**: while the game is injected the change lands immediately,
 and if it is not running yet the value is saved to `unlocker.ini` in `%LOCALAPPDATA%` and applied when

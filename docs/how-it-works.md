@@ -86,9 +86,9 @@ Both findings are written up with the evidence in
 
 | Section | Keys | Notes |
 |---------|------|-------|
-| `[general]` | `delayMs`, `toggleKey`, `closeWithGame`, `keepApplied`, `keepAliveMs`, `gameExe` | `toggleKey=0x75` is F6, and the window can change it live. `keepAliveMs` is how often the watchdog re-checks; `0` disables it. |
+| `[general]` | `delayMs`, `toggleKey`, `closeWithGame`, `keepApplied`, `keepAliveMs`, `gameExe` | `toggleKey=0x75` is F6, and the window can change it live. `keepAliveMs` is how often the watchdog re-checks; `0` disables it. The hotkey takes the whole set of patches off and on again — and it brings back only what is switched on, so a setting left unticked in the window stays unticked. There is no `profile=` key any more: the window always opens on **Profile 1** and loads that file if it exists. |
 | `[fps]` | `enabled`, `value` | `com_maxfps`. `0` = uncapped, `250` = a sensible ceiling, `1000` = effectively uncapped. |
-| `[fov]` | `enabled`, `value`, `max` | `cg_fov` in degrees. `max=` raises the engine's own clamp and doubles as its switch: `0` leaves the clamp alone. |
+| `[fov]` | `enabled`, `value`, `max` | `cg_fov` in degrees. `max=` raises the engine's own 80-degree clamp and doubles as its switch: `0` leaves the clamp alone. **Not in the window** — the clamp's checkbox was taken out, so `max=` is set here and is the only way past 80 degrees. Still applied if switched on in the file. |
 | `[music]` | `enabled` | `enabled=1` writes `snd_enableStream 0`. The soundtrack is streamed audio, so this switches streams off; re-applied continuously because the game saves and reloads its sound settings. |
 | `[r_fullbright]` | `enabled` | `enabled=1` writes `r_fullbright 1` — the world drawn unlit. Read from six places. |
 | `[cg_draw2D]` | `enabled` | `enabled=1` writes `cg_draw2D 0` — no 2D overlay at all: the HUD, the crosshair, the on-screen counters. Read from three places. |
@@ -96,29 +96,138 @@ Both findings are written up with the evidence in
 | `[r_fog]` | `enabled` | `enabled=1` writes `r_fog 0` — no distance fog. Read once, from the view setup. |
 | `[r_filmTweakEnable]` | `enabled` | `enabled=1` writes `r_filmUseTweaks 1` **and** `r_filmTweakEnable 1` — the film colour grade on. It is behind two gates and both are registered off; see *Music and the other switches*. |
 | `[cg_gun_x]`, `[cg_gun_y]`, `[cg_gun_z]` | `enabled`, `value` | Floats: where the viewmodel sits — forward, right and up, in engine units — defaulting to 0 with no real clamp, read once each. One switch and three sliders in the window, and the same enabled flag goes into all three sections. |
+| `[safeArea_adjusted_horizontal]`, `[safeArea_adjusted_vertical]` | `enabled`, `value` | The HUD safe area: the fraction of the screen the 2D overlay is laid out within, so a smaller number pulls the HUD towards the centre. Floats registered at 1.0 — the pair the game's own Options > Safe Area menu writes, and what `getadjustedsafearea*` returns. One switch and two sliders, in a second column of the viewmodel card. |
+| `[safeArea_horizontal]`, `[safeArea_vertical]` | `enabled`, `value` | The base pair of the same family, registered at 0.85 and read by the code that builds the overlay rectangles. **Not in the window**: it was wired to sliders alongside the adjusted pair and moving it changed nothing on screen, so it was taken back out — the same treatment black level and the sensitivity got. Still applied if switched on in the file. |
+| `[compassSize]` | `enabled`, `value` | `compassSize` — "Scale the compass", the size the compass strip is drawn at. A float registered at 1.0 with 0 as its minimum and `FLT_MAX` as its maximum, read from `+0x10` in ten places. A HUD size, so the window keeps it in the safe-area column — but **not** behind that column's switch: it has no gate of its own, so it is written whenever the window saves and applied with everything else, the way blur is, which also means unticking the safe area no longer hands the compass back to the game's own value. The slider stops at 5.00 because the engine offers no ceiling to follow. **0 crashes the game** — a scale of zero collapses the compass geometry and something downstream divides by it — so the slider and its number box stop at 0.1 and the live path floors the value again on the way out. The config file is not floored, and says so. |
+| `[cg_drawCrosshair]` | `enabled`, `value` | An int registered at 1 — "Turn on weapon crosshair", cached at `0x809990` — and read once as a byte gate (`cmp byte ptr [rax + 0x10], 0`) over a block of HUD code, so any non-zero value draws it. The window's fourth switch row, *Hide the crosshair*, is inverted on purpose: enabling it writes the fixed 0, so `enabled=1` here means "hidden". |
+| `[timescale]` | `enabled`, `value` | The game's own clock. A float registered at 1.0 and read as one (`movss` at `+0x1F427D`), cached at `0x1D26580`; 1.0 is neutral, below it slows the game down and above it speeds everything up. Gated by the *Server* card's one switch, which is written to this section's `enabled` **and** to `[phys_gravity]`'s — and with the switch off the cvar is *restored*, so the game's own value comes back rather than the unlocker merely not writing. Its slider covers 0.10 to 5.00 in hundredths. TESTING. |
+| `[phys_gravity]` | `enabled`, `value` | "Physics gravity in units/sec^2." — the gravity on *objects* rather than on the player. A float registered through the float helper at 800, cached at `0x1B53BE0`; 800 is neutral and a negative number inverts it. Gated with the timescale by the *Server* card's one switch, and restored when that is off: a slider over whole units from -2000 to 2000 that starts at **-800** — the same magnitude as the engine's own with the sign flipped, which is the end of the range worth trying in a match; 800 is what to set to put the game back as it was. Not `g_gravity`: the multiplayer binary does not register that name at all — it is in `iw4sp.exe` at `0x75FC6` — so this is the multiplayer equivalent. TESTING. |
 | `[r_filmTweakContrast]`, `[r_filmTweakBrightness]`, `[r_filmTweakDesaturation]`, `[r_filmTweakLightTint]`, `[r_filmTweakMediumTint]`, `[r_filmTweakDarkTint]` | `enabled`, `value` | The grade's six parameters, registered at 1.4, 0, 0.2 and 1.1, 0.9, 0.7. Sliders in the window; only read while the grade itself is on. The tints are *colour* dvars — the section writes one grey level into each of their three colour components — and `r_filmTweakInvert` is a flag, so it alone is not offered. |
+| `[r_glow_allowed]`, `[r_glow]`, `[r_glowUseTweaks]`, `[r_glowTweakEnable]` | `enabled`, `value` | The glow tweak's four gates, each written as 1 by the one switch in the window. All four ship at 0 apart from `r_glow`, so the bloom parameters are inert until every one of them is open — the film tweak's two-gate trap, one level deeper. |
+| `[r_glowTweakRadius0]`, `[r_glowTweakBloomIntensity0]`, `[r_glowTweakBloomCutoff]`, `[r_glowTweakBloomDesaturation]` | `enabled`, `value` | The bloom itself, registered at 5, 20, 0.5 and 0. Sliders in the window, and turned up far they wash the screen out completely. |
+| `[r_blur]`, `[r_blacklevel]` | `enabled`, `value` | "Dev tweak to blur the screen" and "Black level (negative brightens output)". Floats registered at 0, the second of them between -0.99 and +0.99. **No gate** — nothing in the game switches them and 0 is neutral — so the window writes both whenever it saves. Blur is confirmed working and carries a slider at the foot of the glow column; black level does not, because only two of its four references are real value reads (`+0x30B14`, `+0xF1790`) and both sit in a set-up path rather than the frame loop — a slider for it changed nothing visible, so the section is file-only, like `[sensitivity]`. |
 | `[sensitivity]` | `enabled`, `value` | `sensitivity`. **Not in the window** — writing the cvar was measured not to change the aim in game, so the slider was removed rather than left promising something that does not happen. Still applied if switched on here: the cvar *and* a `seta sensitivity "..."` line in the game's own settings file. Off by default because it changes how the game plays. |
 | `[drawfps]` | `enabled`, `value` | `cg_drawFPS`, an enum: 0 Off, 1 Simple, 2 SimpleRanges, 3 Verbose, 4 Verbose+Viewpos. **Single player only** - see below. |
 | `[netfps]` | `enabled`, `value` | `sv_network_fps`, the only counter multiplayer reads. It is the network rate, not the frame rate. |
 | `[lagometer]` | `enabled`, `value` | `drawLagometer`. Registered in multiplayer and read by nothing, so it does nothing; the switch is kept so that claim can be re-tested. |
 
-The window covers the frame cap, the field of view, the viewmodel offsets, the
-film tweak and its six parameters, and — under *Other Settings* — the five switches, the
-in-game hotkey and "close with the game". The
-counters are file-only for now, which is why the window reads them without
-rewriting them: pushing the values back must not switch off something the file
-turned on. Read the sensitivity row before enabling it — it is file-only too, and
-for a better reason: it does not work.
+The window covers the frame cap, the field of view, the viewmodel offsets and the
+HUD safe area with the compass size, the film tweak and its six parameters, the
+glow tweak's four plus blur, and — under *Other Settings* — the six switches, the
+in-game hotkey with "close with the game" at the right-hand end of its row. Below
+that, in a card of its own, is *Server*: the two testing settings, the timescale and
+the physics gravity, behind **one switch that gates both of them** and folded away
+until it is ticked, so a window that is not testing anything does not carry them.
+The counters are file-only for now, which is why the window
+reads them without rewriting them: pushing the values back must not switch off
+something the file turned on. Read the sensitivity row before enabling it — it is
+file-only too, and for a better reason: it does not work. Black level is file-only
+as well, because its value is not consulted per frame.
 
-The viewmodel and film tweak cards fold away. Each has a switch directly under its
-title and a stack of sliders under that, and the stack is worth nothing while the
-switch is off, so it is hidden and everything below is pulled up — the window is
-only as tall as the settings it is showing. The switch itself never moves: it is
-what opens the card, so the rows come and go underneath it, and it carries a small
-triangle pointing right while they are folded away and down once they are out.
-`tools/smokegui.ps1 -Click 1031,1023` toggles them from outside and prints the
-window's size after each click, which is how the layout is checked without anyone
-watching (771 → 860 → 1012 pixels, and back to 771).
+### Profiles
+
+The strip above the frame cap carries a dropdown, and it is the only part of the
+window that deals in more than one setting at a time. There are three slots —
+*Profile 1* to *Profile 3* — and each is an ordinary `unlocker.ini` of its own
+under `%LOCALAPPDATA%\MW2Unlocker\profiles`, so a profile can be edited by hand,
+copied, or handed to somebody else like any other config.
+
+| Action | What it does |
+|---|---|
+| **Choosing a slot** | Loads it into the window: every setting in it at once, through the same code start-up uses, so nothing is left over from the settings that were there before. The window is then laid out again, because the switches a profile carries decide which rows are showing. A slot that has never been used has no file yet, and choosing it says so rather than inventing values. |
+| **Apply & save** | Is what stores them: it writes the working config as always, and then the window's values into the slot it is on. A slot's first save starts the file as a copy of the working config, so it carries the comments and any section the window does not offer. |
+
+Loading a slot does not apply anything on its own — press **Apply & save** for that,
+as with any other change. The window always opens on **Profile 1** and loads it if
+the file exists, so that slot is the setting the tool starts from; delete the file,
+or rename another profile over it, to change what that is.
+
+The viewmodel, film tweak and *Server* cards fold away. Each has a switch directly
+under its title and a stack of sliders under that, and the stack is worth nothing
+while the switch is off, so it is hidden and everything below is pulled up — the
+window is only as tall as the settings it is showing, and its bottom edge follows,
+so there is no field of empty background under the buttons. The switch itself never
+moves: it is what opens the card, so the rows come and go underneath it, and it
+carries a small triangle pointing right while they are folded away and down once
+they are out.
+
+The viewmodel and film cards carry two switches and two columns of rows, so a card
+stays open while *either* of its switches is on. The viewmodel card has the three
+offsets on the left and the safe area's two sliders with the compass under them on
+the right — three rows against three, which is why the card is the same height as
+it was before the safe area was added; the film card has the grade on the left and
+the glow on the right, with blur at the foot of the glow column. Ticking one switch
+alone brings its column out and leaves the other folded. Blur has no gate of its
+own, so it keeps working whichever way the switches are set; it simply lives in
+the glow column, and its slider is in reach when that column is open. The compass
+under the safe area is the same shape: it has no gate of its own either, so
+ticking the safe-area switch only brings its slider into reach — its value is
+written and applied either way.
+
+The Server card is the simple case: one switch, two rows, and the switch is a real
+gate rather than only a disclosure — with it folded the two testing settings are
+*restored* to the game's own values, not merely left unwritten. It starts folded,
+so the card is one switch high until it is wanted; and because the profile the
+window opens on carries that switch like any other setting, a slot saved with it
+on brings the card out with it.
+`tools/smokegui.ps1 -Click 1031,1023` toggles the viewmodel and film switches from
+outside and prints the window's size after each click, which is how the layout is
+checked without anyone watching; `-Click 1093` does the same for the Server card
+(541x666 folded, 541x718 open).
+
+The small circle beside the status line at the foot of the window says what the
+unlocker is doing at a glance: green once it has injected and the game is
+answering on the live channel, amber while it is still looking for the game or
+waiting for the channel to appear, red when an injection failed or the game did
+not answer a change. The window paints it itself — it is not a control — and the
+template insets the status text to leave room for it. Because the status line is
+an ordinary control that is pulled up when a card folds, the paint handler moves
+the dot by the same amount, which is what keeps the two together.
+
+Beside the buttons, at the foot of the window, is the build number —
+`build 42   2026-10-02`. In the window rather than in the title bar, because the
+title belongs to the window manager and it is the window that gets screenshotted.
+It is stamped **at build time**, by `cmake/bump_build.cmake`, from a counter kept
+in the build tree: the counter is seeded from the commit count and then goes up by
+one on every build, so two binaries from the same afternoon cannot claim the same
+number — the commit count on its own did exactly that, which is why it was
+replaced. The short hash rides along, with a `+` when the tree had uncommitted
+changes.
+
+Underneath it is **Check for updates**. It asks the repository - `version.txt` on
+the main branch, fetched over HTTPS - what the newest published build is, and says
+what it found: *Up to date (build 44)*, *Update available: build 51 - click to
+open*, or the reason it could not tell. Once a newer build is known, the next
+click on that same button opens the download page in the browser.
+
+It deliberately does **not** download or replace the running EXE. A program that
+fetches a new binary and overwrites itself with it is exactly the behaviour
+Windows Defender already flags this tool for, so the click it would save is not
+worth that. The check runs on a thread of its own, so the window never freezes
+waiting for GitHub, and it gives up after five seconds.
+
+Publishing a build therefore has one extra step: set `version.txt` to that build's
+number and commit it with the new EXE. Nothing else has to be kept in step - the
+number in the file is compared with the one the EXE was stamped with, and both come
+from the same counter in the build tree. A repository that has not published the
+file yet answers 404, and the button says so rather than looking broken.
+
+Above the first card is the one other piece of text: *"Some settings take effect
+only after you rejoin a match."* Several of these cvars — the safe area, the
+compass, the HUD switches — are read when a match is set up rather than every
+frame, so a change made mid-match does nothing until the next one starts. The note
+is drawn in a font three quarters the size of everything else, from the same base
+font the card titles are made from, so it reads as advice rather than as one more
+setting.
+
+The status line sits in a box of its own at the foot of the window, beside the
+buttons: the window paints it, the way it paints the cards, and moves it with the
+status line when a card folds. The note and the build number are the other two
+pieces of text that sit on the window rather than inside a card, and they take the
+*window* brush when the control asks what to paint behind itself, so they are text
+on the background rather than a grey rectangle whose left edge lines up with
+nothing. The status line, being inside that box, takes the card brush and blends
+into it instead.
 
 Any section can be replaced by a fully manual one (`type=`, `cvar=`,
 `valueOffsets=`, `signature=`, `patch=`). The tail of `unlocker.ini` documents
@@ -351,6 +460,8 @@ The six above are all read, which is why they are offered and those are not.
 
 ```
 CMakeLists.txt          Build (DLL + injector + one-click launcher, x64 enforced)
+cmake/bump_build.cmake  Stamps the per-build number into the generated build_info.h
+version.txt             The newest published build number, read by "Check for updates"
 config/unlocker.ini     Feature configuration (embedded into the launcher, copied next to the DLL)
 src/log.*               Minimal file + debug-output logger
 src/memory.*            Module range lookup, safe reads/writes, page iteration
@@ -363,7 +474,9 @@ src/ipc.h               The live-channel protocol the launcher and the DLL share
 injector/main.cpp       x64 LoadLibrary injector
 launcher/main.cpp       Launcher plumbing: payload, process lookup, injection, ini editing
 launcher/gui.cpp        The control window: dialog, custom slider, owner-drawn controls
+launcher/update.*       The HTTPS "is there a newer build?" check (WinHTTP)
 launcher/app.h          Interface between the window and the plumbing
+launcher/build_info.h.in  The build-number template, stamped at build time
 docs/finding-signatures.md  The full reverse-engineering write-up
 dist/                   Built, ready-to-run output
 tools/                  Helper scripts used during the investigation

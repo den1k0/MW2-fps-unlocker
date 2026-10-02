@@ -32,6 +32,75 @@ if(MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# Build number
+#
+# So a user can say which build they are running. The number is a counter kept
+# in the build tree: it is seeded from the commit count, so a fresh tree starts
+# somewhere sensible and the number never goes backwards, and then it goes up by
+# one on every *build*. Taking the commit count on its own was what left it stuck
+# on the same number while the tree was being worked on - two binaries from
+# different afternoons both said "build 39" - and a counter that only moved on
+# configure has the same problem from the other side, because editing a source
+# does not re-run CMake: the next binary would carry the previous number again.
+#
+# The stamping itself is cmake/bump_build.cmake, run by the mw2_build_number
+# target below; MW2Unlocker depends on that target, so the header is written
+# before the launcher is compiled.
+#
+# The short commit hash rides along for reference, with a "+" when the tree has
+# uncommitted changes, and a tree with no git at all falls back rather than
+# failing.
+# ---------------------------------------------------------------------------
+execute_process(COMMAND git rev-list --count HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE MW2_BUILD_COMMITS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE MW2_BUILD_RESULT)
+
+execute_process(COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE MW2_BUILD_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET)
+
+if(NOT MW2_BUILD_RESULT EQUAL 0 OR MW2_BUILD_COMMITS STREQUAL "")
+    set(MW2_BUILD_COMMITS "0")
+    set(MW2_BUILD_HASH "nogit")
+endif()
+
+string(STRIP "${MW2_BUILD_HASH}" MW2_BUILD_HASH)
+
+# The counter, read here only to say where it has got to - the increment and the
+# header belong to the build. It lives in the build directory rather than the
+# source tree, so stamping never leaves a tracked file dirty, and so each working
+# copy counts on its own.
+set(MW2_COUNTER_FILE "${CMAKE_BINARY_DIR}/build_number.txt")
+set(MW2_BUILD_NUMBER "")
+if(EXISTS "${MW2_COUNTER_FILE}")
+    file(READ "${MW2_COUNTER_FILE}" MW2_BUILD_NUMBER)
+    string(STRIP "${MW2_BUILD_NUMBER}" MW2_BUILD_NUMBER)
+endif()
+if(NOT MW2_BUILD_NUMBER MATCHES "^[0-9]+$")
+    set(MW2_BUILD_NUMBER "${MW2_BUILD_COMMITS}")
+endif()
+message(STATUS "MW2 unlocker: the build counter is at ${MW2_BUILD_NUMBER}; "
+               "the next build is stamped with the number after it")
+
+# The stamping step. ALL, so it runs on every build even when nothing else does,
+# and the launcher depends on it so it has happened before the compile that
+# includes the header.
+add_custom_target(mw2_build_number ALL
+    COMMAND ${CMAKE_COMMAND}
+            "-DMW2_SOURCE_DIR=${CMAKE_SOURCE_DIR}"
+            "-DMW2_BINARY_DIR=${CMAKE_BINARY_DIR}"
+            "-DMW2_BUILD_COMMITS=${MW2_BUILD_COMMITS}"
+            "-DMW2_BUILD_HASH=${MW2_BUILD_HASH}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/bump_build.cmake"
+    COMMENT "Stamping the build number"
+    VERBATIM)
+
+# ---------------------------------------------------------------------------
 # Unlocker DLL (loaded inside the game process)
 # ---------------------------------------------------------------------------
 add_library(mw2_unlocker SHARED
@@ -91,6 +160,7 @@ add_custom_command(
 add_executable(MW2Unlocker
     launcher/main.cpp
     launcher/gui.cpp
+    launcher/update.cpp
     "${LAUNCHER_RC}")
 
 # A window, not a console: double-clicking must not open a terminal alongside it.
@@ -101,6 +171,9 @@ set_target_properties(MW2Unlocker PROPERTIES
     WIN32_EXECUTABLE TRUE)
 
 add_dependencies(MW2Unlocker mw2_unlocker)
+# The build number, stamped before this project compiles: gui.cpp includes the
+# header it writes.
+add_dependencies(MW2Unlocker mw2_build_number)
 
 # UNICODE/_UNICODE so the Win32 macros (RT_RCDATA, MAKEINTRESOURCE) resolve to
 # their wide variants, matching the explicit ...W calls the launcher uses.
@@ -109,11 +182,17 @@ target_compile_definitions(MW2Unlocker PRIVATE UNICODE _UNICODE)
 # src/ipc.h defines the live channel this launcher and the injected DLL talk
 # over. Sharing the header is what stops the two drifting apart: the window
 # class, the message name and the value struct have exactly one definition.
-target_include_directories(MW2Unlocker PRIVATE "${CMAKE_SOURCE_DIR}/src")
+# The generated folder holds build_info.h. The mw2_build_number target writes it
+# at build time, and it has already run by the time this project compiles.
+target_include_directories(MW2Unlocker PRIVATE
+    "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
-# comctl32 for the control window's dialog, dwmapi for the dark caption bar, and
-# uxtheme to ask for the dark variant of the edit controls.
-target_link_libraries(MW2Unlocker PRIVATE comctl32 dwmapi uxtheme)
+# comctl32 for the control window's dialog, dwmapi for the dark caption bar,
+# uxtheme to ask for the dark variant of the edit controls, winhttp for the
+# "Check for updates" request, and shell32 to open the download page in the
+# browser.
+target_link_libraries(MW2Unlocker PRIVATE comctl32 dwmapi uxtheme winhttp shell32)
 
 if(MSVC)
     target_link_options(MW2Unlocker PRIVATE /DYNAMICBASE /HIGHENTROPYVA)

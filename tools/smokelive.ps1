@@ -12,18 +12,33 @@
 # live update.
 #
 # Usage: powershell -NoProfile -File tools/smokelive.ps1
+#
+# -ServerOff pushes the Server card's switch as 0, the way the window does when it
+# is folded and left alone: the two testing settings are then restored instead of
+# applied. With a game to inject into the log says which of the two it did; in this
+# host the cvars do not exist, so both paths stop at "the cvar was not located" -
+# what the switch proves here is only that the field marshals.
+#
+# The toggle the in-game hotkey drives cannot be exercised from here: the DLL is
+# loaded inside the host process, so a P/Invoke from this one cannot reach it. What
+# that path does is visible in the log instead - every apply, including the one the
+# toggle makes, writes "features: applying N of M feature(s)", and N is the count
+# that is switched on.
 
 param(
     [string]$Dll = 'build\Release\mw2_unlocker.dll',
     [string]$Injector = 'build\Release\injector.exe',
-    [string]$Log = 'build\Release\mw2_unlocker.log'
+    [string]$Log = 'build\Release\mw2_unlocker.log',
+    # Push the Server card's switch as 0 instead of 1: the folded, left-alone case,
+    # where the two testing settings are restored rather than applied.
+    [switch]$ServerOff
 )
 
 # The struct below MIRRORS src/ipc.h. Change one and you must change the other:
 # the DLL checks cbData against its own sizeof(Values) and the version against
 # its own protocol version, and refuses anything that does not match - by design,
 # because a struct that has drifted is a struct that will corrupt memory.
-$ProtocolVersion = 9
+$ProtocolVersion = 16
 
 $ErrorActionPreference = 'Stop'
 
@@ -59,6 +74,21 @@ public struct Values {
     public float filmLightTint;
     public float filmMediumTint;
     public float filmDarkTint;
+    public int glowEnabled;
+    public float glowRadius;
+    public float glowIntensity;
+    public float glowCutoff;
+    public float glowDesaturation;
+    public float blurValue;
+    public float blackLevel;
+    public int safeAreaEnabled;
+    public float safeAreaAdjustedH;
+    public float safeAreaAdjustedV;
+    public float compassSize;
+    public int crosshairEnabled;
+    public float timescale;
+    public float physGravity;
+    public int serverEnabled;
 }
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -146,7 +176,7 @@ public static int PayloadSize() {
 
 // Returns the value the receiving window procedure returned, or -1 if the
 // message could not be delivered at all.
-public static long Push(uint magic, uint version, int fps, float fov) {
+public static long Push(uint magic, uint version, int fps, float fov, int server) {
     Values v = new Values();
     v.version = version;
     v.fpsEnabled = 1;
@@ -179,6 +209,24 @@ public static long Push(uint magic, uint version, int fps, float fov) {
     v.filmLightTint = 1.1f;
     v.filmMediumTint = 0.9f;
     v.filmDarkTint = 0.7f;
+    v.glowEnabled = 1;
+    v.glowRadius = 12.0f;
+    v.glowIntensity = 40.0f;
+    v.glowCutoff = 0.5f;
+    v.glowDesaturation = 0.0f;
+    v.blurValue = 0.2f;
+    v.blackLevel = -0.1f;
+    v.safeAreaEnabled = 1;
+    v.safeAreaAdjustedH = 0.9f;
+    v.safeAreaAdjustedV = 0.9f;
+    v.compassSize = 1.0f;
+    v.crosshairEnabled = 1;
+    v.timescale = 1.0f;
+    v.physGravity = 800.0f;
+    // The Server card's switch: 1 applies the two testing settings, 0 restores
+    // them. In this host neither can be located, so the log stops short of saying
+    // which - the real game is where the difference shows.
+    v.serverEnabled = server;
 
     int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Values));
     System.IntPtr payload = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
@@ -263,8 +311,9 @@ if ($window -eq [IntPtr]::Zero) {
 Write-Output "control window found - pushing values"
 
 # 0x4D573255 is ipc::kCopyDataMagic ('MW2U').
-$result = [Live.Client]::Push(0x4D573255, [uint32]$ProtocolVersion, 333, 90.0)
-Write-Output ("SendMessageTimeout returned {0} (1 = the receiver applied something)" -f $result)
+$server = if ($ServerOff) { 0 } else { 1 }
+$result = [Live.Client]::Push(0x4D573255, [uint32]$ProtocolVersion, 333, 90.0, $server)
+Write-Output ("SendMessageTimeout returned {0} (1 = the receiver applied something); server switch {1}" -f $result, $server)
 if ($result -eq -1) { Write-Output "the message could not be delivered" }
 if ($result -eq -2) { Write-Output "the control window could not be found" }
 

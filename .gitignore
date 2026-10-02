@@ -4,6 +4,8 @@ out/
 *.user
 .vs/
 .vscode/
+# tools/disasm.py is importable, so a run leaves this behind
+__pycache__/
 
 # Local analysis scratch. The reverse-engineering scripts and their output live
 # in the repo root; real sources live in src/, launcher/, injector/, tools/.
@@ -11,3 +13,9 @@ out/
 /*.txt
 # ...but that txt rule also matches the build file, so put it back.
 !/CMakeLists.txt
+# ...and the published build number: "Check for updates" reads it straight out of
+# the repository, so it has to be committed.
+!/version.txt
+
+# The DLL's own log, written next to whatever it was loaded into.
+logs/

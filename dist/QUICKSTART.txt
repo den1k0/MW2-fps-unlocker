@@ -33,7 +33,9 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
 
     [fov]
     value=90         field of view, in degrees
-    max=179          also raise the engine's own 80-degree clamp
+    max=179          also raise the engine's own 80-degree clamp. NOT in the
+                     window any more - the clamp's checkbox was taken out, so
+                     this line is the only way past 80 degrees
 
     [music]
     enabled=0        music off. The soundtrack is streamed audio, so this switches
@@ -57,10 +59,92 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
                                          components: a grey tint, like the game's
                                          own
 
+    [r_glow_allowed]          enabled=0  the bloom's four gates. The window's one
+    [r_glow]                  enabled=0  "Tweak the glow" switch writes 1 to all
+    [r_glowUseTweaks]         enabled=0  of them; the game ships all but r_glow
+    [r_glowTweakEnable]       enabled=0  closed, so the values below do nothing
+                                         until it is ticked
+
+    [r_glowTweakRadius0]          enabled=0  the bloom itself, with a slider each.
+    [r_glowTweakBloomIntensity0]  enabled=0  The engine registers them at 5, 20,
+    [r_glowTweakBloomCutoff]      enabled=0  0.5 and 0; the window starts radius
+    [r_glowTweakBloomDesaturation] enabled=0 and intensity lower, at 1 and 2,
+                                             because 5 and 20 already wash the
+                                             screen out
+
+    [r_blur]       enabled=1   blur has no switch in the game and 0 is neutral, so
+                               the window writes it whenever it saves and its
+                               slider - at the foot of the glow column - is always
+                               live. Confirmed working.
+    [r_blacklevel] enabled=1   black level has no gate either, but its value only
+                               lands at renderer set-up rather than every frame,
+                               so a slider for it moved nothing visible: there is
+                               no control, and this section is the only way to set
+                               it. Covers -0.99 to +0.99, and negative brightens
+
     [cg_gun_x]     enabled=0   where the first-person weapon sits: forward.
     [cg_gun_y]     enabled=0   right (cg_gun_y) and up (cg_gun_z), in engine
     [cg_gun_z]     enabled=0   units. One switch and three sliders in the window,
                                -10.00 to +10.00
+
+    [safeArea_adjusted_horizontal] enabled=0  the HUD safe area: the fraction of
+    [safeArea_adjusted_vertical]   enabled=0  the screen the 2D overlay is laid
+                                              out within, so a smaller number
+                                              pulls the HUD towards the centre.
+                                              Two floats registered at 1.0, with
+                                              one switch and two sliders on the
+                                              right of the viewmodel card. This is
+                                              the pair the game's own Options menu
+                                              writes
+
+    [safeArea_horizontal]          enabled=0  the base pair of the same family,
+    [safeArea_vertical]            enabled=0  registered at 0.85. NOT in the
+                                              window: moving it changed nothing on
+                                              screen, so its sliders were taken
+                                              back out and it is set here only
+
+    [compassSize]                  enabled=1  "Scale the compass": how large the
+                                              compass strip is drawn. A float
+                                              registered at 1.0 with no real
+                                              ceiling (FLT_MAX is passed as the
+                                              maximum), read in ten places. A HUD
+                                              size, so its slider sits under the
+                                              safe area's - but it has no gate of
+                                              its own: its value is written
+                                              whatever that switch says, and
+                                              unticking the safe area leaves it
+                                              alone. ! 0 crashes the game - the
+                                              slider and its box floor at 0.1, and
+                                              this file is not floored
+
+    [cg_drawCrosshair]             enabled=0  "Turn on weapon crosshair", an int
+                                              registered at 1 and read once as a
+                                              byte gate over a block of HUD code,
+                                              so 0 hides it. The window's "Hide the
+                                              crosshair" switch writes that 0:
+                                              enabled=1 here means hidden
+
+    [timescale]                    enabled=0  the game's own clock, a float
+                                              registered at 1.0. Below 1.0 slows
+                                              the game down, above it speeds
+                                              everything up; 1.0 is neutral. This
+                                              and the gravity below share ONE
+                                              switch in the window - the "Server"
+                                              card's - and the same flag goes into
+                                              both sections: with it off the cvars
+                                              are handed back to the game. Slider:
+                                              0.10 to 5.00. TESTING
+
+    [phys_gravity]                 enabled=0  "Physics gravity in units/sec^2."
+                                              - the gravity on objects, a float
+                                              registered at 800, which is neutral;
+                                              negative inverts it. Not g_gravity,
+                                              which the multiplayer binary does not
+                                              have. Shares the Server card's switch
+                                              with the timescale, and the slider
+                                              starts at -800: the same size as the
+                                              engine's own with the sign flipped
+                                              (range -2000 to 2000). TESTING
 
     [sensitivity]
     enabled=0        mouse sensitivity. NOT in the window any more: writing the
@@ -78,20 +162,53 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
 
     [general] toggleKey=0x75    the in-game key: F1-F12, 0x75 is F6
 
-The window groups music, fullbright, the HUD, the weapon model and the fog -
-along with the in-game hotkey and "close with the game" - into one card called
-"Other Settings"; the film tweak has a card of its own with sliders for its six
-parameters, and the viewmodel offsets have a card with three sliders and one switch.
+The strip along the top carries the profile box: a dropdown of three slots, kept as
+Profile 1.ini to Profile 3.ini in %LOCALAPPDATA%\MW2Unlocker\profiles. Choosing one
+puts its settings back into the window - then press Apply & save, because choosing
+one on its own changes nothing in the game. Apply & save is also what stores what
+the window shows into the slot you are on, starting that file as a copy of your
+config the first time. The window opens on Profile 1 and loads it if it exists, so
+that is the slot to keep your everyday settings in.
 
-Those last two cards fold away. Their sliders do nothing while their switch is off,
-so the rows are hidden and the window shrinks to fit - tick the switch and they
-appear right below it, untick it and they go again. The switch itself does not
-move, and the little triangle next to it points right while the card is closed and
-down once it is open.
+The window groups music, fullbright, the HUD, the crosshair, the weapon model and
+the fog - along with the in-game hotkey and "close with the game" beside it - into
+one card called "Other Settings"; below that, the two testing sliders (the timescale
+and the physics gravity) have a "Server" card of their own, behind a single switch
+that gates both of them. The film tweak has a card of its own, laid out in two
+columns - its own six sliders on the left, the glow tweak's switch and four sliders
+plus the blur slider on the right - and the viewmodel card has the three offsets on
+the left and the HUD safe area's two sliders with the compass under them on the
+right, each column with its own switch.
+
+Three of those cards fold away: the viewmodel, the film tweak and the Server one.
+The rows do nothing while their switch is off, so they are hidden and the window
+shrinks to fit - tick a switch and its rows appear right below it, untick it and
+they go again. The viewmodel and film cards stay open while either of their switches
+is on; the Server card has the one, so it is simply open or shut, and it starts
+folded. That switch is a real gate rather than only a disclosure: with it off the
+unlocker hands the timescale and the physics gravity back to the game. The switch
+itself does not move, and the little triangle next to it points right while its rows
+are closed and down once they are open.
+
+The line at the very top of the window is worth reading once: some of these
+settings are only picked up when a match is set up, so they do nothing until you
+rejoin one. The safe area, the compass and the HUD switches are the ones that
+behave that way; the frame cap, the field of view, the viewmodel and the film
+tweak apply as soon as they are written.
+
+The small dot beside the status line at the foot of the window says what the
+unlocker is doing at a glance: green once the game is answering, yellow while it
+is still looking for it, red if something failed. Beside the buttons is the build
+number - "build 44   2026-10-02" - which is what to quote if you have a problem
+with a particular build. It is stamped afresh on every build from a counter kept in
+the build tree, so two builds cannot share a number. Under it is "Check for
+updates": it asks GitHub what the newest published build is and says so, and if
+there is a newer one the next click opens the download page in your browser. It
+does not download or install anything by itself.
 
 To drop a feature entirely, put enabled=0 in its section. The two counters have no
-controls in the window yet, and neither has the sensitivity, so this file is where
-they are switched on.
+controls in the window yet, and neither have the sensitivity or black level, so
+this file is where they are switched on.
 
 
 The counter on screen
