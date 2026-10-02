@@ -8,9 +8,9 @@ Start MW2, then run:
 YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 ```
 
-![alt text][logo]
+![alt text][preview]
 
-[logo]: https://github.com/den1k0/MW2-fps-unlocker/blob/main/preview.jpg "Logo"
+[preview]: https://github.com/den1k0/MW2-fps-unlocker/blob/main/docs/preview.png "Preview"
 
 A window opens with a slider and a checkbox for the frame cap and for the field of
 view, three sliders that move the first-person weapon, a film tweak card with six
