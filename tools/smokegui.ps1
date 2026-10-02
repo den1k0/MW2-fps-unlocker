@@ -51,7 +51,7 @@ param(
     # Check that the note above the first card really did get the smaller font.
     # The control listing cannot show a font, so the two handles are compared.
     [switch]$CheckNote,
-    # Click "Check for updates" and read its label back. The check runs on its
+    # Click "Check for update" and read its label back. The check runs on its
     # own thread and only replaces the label when GitHub has answered, so this
     # waits for it to stop saying "Checking" - the label is the whole result.
     [switch]$CheckUpdate
@@ -111,7 +111,7 @@ $KIdToggleKey = 1016
 $KIdNote = 1083
 # The profile box on the top strip.
 $KIdProfileCombo = 1092
-# "Check for updates", on its own row under the build number.
+# "Check for update", on its own row under the build number.
 $KIdCheckUpdates = 1094
 
 # WM_COMMAND, and the messages that drive the profile box: read it back, set the
@@ -516,7 +516,10 @@ if ($CheckUpdate) {
     } else {
         # The listing read the button's text once, when the window opened; the
         # check replaces it, so every reading here goes back to the control.
-        Write-Output ("update button before: '{0}'" -f (Get-Text $button.Handle))
+        $before = New-Object 'W.U+RECT'
+        [void][W.U]::GetWindowRect($button.Handle, [ref]$before)
+        Write-Output ("update button before: '{0}'  ({1}px wide)" -f `
+            (Get-Text $button.Handle), ($before.right - $before.left))
         [void][W.U]::SendMessage($button.Handle, $BmClick, [IntPtr]::Zero, [IntPtr]::Zero)
 
         $label = ''
@@ -525,7 +528,12 @@ if ($CheckUpdate) {
             $label = Get-Text $button.Handle
             if ($label -notmatch 'Checking') { break }
         }
-        Write-Output ("update button after:  '{0}'" -f $label)
+        # The box is sized to the label by the window, so its width is worth
+        # reporting too: a label it did not fit would show up here.
+        $rect = New-Object 'W.U+RECT'
+        [void][W.U]::GetWindowRect($button.Handle, [ref]$rect)
+        Write-Output ("update button after:  '{0}'  ({1}px wide by {2})" -f `
+            $label, ($rect.right - $rect.left), $attempt)
     }
 }
 

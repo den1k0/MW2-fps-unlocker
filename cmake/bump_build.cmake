@@ -58,7 +58,11 @@ if(gitResult EQUAL 0 AND NOT dirty STREQUAL "")
     set(hash "${hash}+")
 endif()
 
-string(TIMESTAMP date "%Y-%m-%d" UTC)
+# Local time, not UTC. The date sits beside the build number so a report can say
+# which binary it is, and "local" is the date the person building it was looking
+# at - a build at one in the morning in a +03:00 timezone was stamped with the
+# previous day.
+string(TIMESTAMP date "%Y-%m-%d")
 
 set(MW2_BUILD_NUMBER "${number}")
 set(MW2_BUILD_DATE "${date}")

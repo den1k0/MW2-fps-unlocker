@@ -33,7 +33,7 @@ top warns that some settings only take effect once you rejoin a match, a small d
 beside the status line at the bottom turns green once the game is answering, yellow
 while it is still looking for it, and red if something failed, and the build number
 sits beside the buttons — stamped afresh on every build — so you can say which
-version you are on, with **Check for updates** under it: it asks the repository
+version you are on, with **Check for update** under it: it asks the repository
 whether a newer build has been published and opens the download page if one has.
 
 Change what you want, then press **Apply && save**: while the game is injected the change lands immediately,

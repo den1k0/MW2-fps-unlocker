@@ -9,7 +9,7 @@
 // block in CMakeLists.txt.
 #define MW2_BUILD_NUMBER L"@MW2_BUILD_NUMBER@"
 
-// The build's date, UTC.
+// The build's date, in the local time of whoever built it.
 #define MW2_BUILD_DATE L"@MW2_BUILD_DATE@"
 
 // The short form, which is what the window shows beside the buttons:

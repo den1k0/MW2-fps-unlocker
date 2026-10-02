@@ -190,7 +190,7 @@ target_include_directories(MW2Unlocker PRIVATE
 
 # comctl32 for the control window's dialog, dwmapi for the dark caption bar,
 # uxtheme to ask for the dark variant of the edit controls, winhttp for the
-# "Check for updates" request, and shell32 to open the download page in the
+# "Check for update" request, and shell32 to open the download page in the
 # browser.
 target_link_libraries(MW2Unlocker PRIVATE comctl32 dwmapi uxtheme winhttp shell32)
 

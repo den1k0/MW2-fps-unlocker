@@ -13,7 +13,7 @@ __pycache__/
 /*.txt
 # ...but that txt rule also matches the build file, so put it back.
 !/CMakeLists.txt
-# ...and the published build number: "Check for updates" reads it straight out of
+# ...and the published build number: "Check for update" reads it straight out of
 # the repository, so it has to be committed.
 !/version.txt
 

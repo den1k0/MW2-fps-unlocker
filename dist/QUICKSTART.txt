@@ -202,7 +202,7 @@ is still looking for it, red if something failed. Beside the buttons is the buil
 number - "build 44   2026-10-02" - which is what to quote if you have a problem
 with a particular build. It is stamped afresh on every build from a counter kept in
 the build tree, so two builds cannot share a number. Under it is "Check for
-updates": it asks GitHub what the newest published build is and says so, and if
+update": it asks GitHub what the newest published build is and says so, and if
 there is a newer one the next click opens the download page in your browser. It
 does not download or install anything by itself.
 

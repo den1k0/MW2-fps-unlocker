@@ -185,16 +185,17 @@ an ordinary control that is pulled up when a card folds, the paint handler moves
 the dot by the same amount, which is what keeps the two together.
 
 Beside the buttons, at the foot of the window, is the build number —
-`build 42   2026-10-02`. In the window rather than in the title bar, because the
+`build 46   2026-10-03`. In the window rather than in the title bar, because the
 title belongs to the window manager and it is the window that gets screenshotted.
 It is stamped **at build time**, by `cmake/bump_build.cmake`, from a counter kept
 in the build tree: the counter is seeded from the commit count and then goes up by
 one on every build, so two binaries from the same afternoon cannot claim the same
 number — the commit count on its own did exactly that, which is why it was
-replaced. The short hash rides along, with a `+` when the tree had uncommitted
-changes.
+replaced. The date is the builder's own local date rather than UTC, so it matches
+the day they were having rather than yesterday. The short hash rides along, with a
+`+` when the tree had uncommitted changes.
 
-Underneath it is **Check for updates**. It asks the repository - `version.txt` on
+Underneath it is **Check for update**. It asks the repository - `version.txt` on
 the main branch, fetched over HTTPS - what the newest published build is, and says
 what it found: *Up to date (build 44)*, *Update available: build 51 - click to
 open*, or the reason it could not tell. Once a newer build is known, the next
@@ -461,7 +462,7 @@ The six above are all read, which is why they are offered and those are not.
 ```
 CMakeLists.txt          Build (DLL + injector + one-click launcher, x64 enforced)
 cmake/bump_build.cmake  Stamps the per-build number into the generated build_info.h
-version.txt             The newest published build number, read by "Check for updates"
+version.txt             The newest published build number, read by "Check for update"
 config/unlocker.ini     Feature configuration (embedded into the launcher, copied next to the DLL)
 src/log.*               Minimal file + debug-output logger
 src/memory.*            Module range lookup, safe reads/writes, page iteration

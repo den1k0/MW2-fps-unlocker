@@ -109,11 +109,14 @@
 # counts whole units - an engine unit of gravity is a large number, so hundredths
 # of one would be a range nothing could use.
 #
-# On the button row at the foot, under the build number, is "Check for updates":
+# On the button row at the foot, under the build number, is "Check for update":
 # its own row rather than beside the buttons, because what it does is not part of
-# the window's job of writing settings. It is wide enough for the labels it
-# replaces itself with - "Update available: build 51 - click to open" is the
-# longest - so it is 170 units across where the buttons opposite are 78.
+# the window's job of writing settings. Unlike every other control here, its
+# width in this template is only a starting point: the label is replaced as the
+# check reports back, so the window sizes the box to whatever it says - see
+# FitCheckButton in gui.cpp. 90 units is what "Check for update" needs. Only the
+# width moves; the left edge stays on the column the build number uses, so the
+# button grows and shrinks to the right.
 #
 # The status line at the bottom is inset from the left so the launcher can paint a
 # small indicator dot beside it - green once the unlocker is injected, amber while
@@ -258,7 +261,7 @@ BEGIN
     LTEXT           \"\", 1011, 26, 479, 262, 18
 
     LTEXT           \"\", 1082, 20, 507, 106, 13
-    CONTROL         \"Check for updates\", 1094, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 522, 170, 11
+    CONTROL         \"Check for update\", 1094, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 522, 90, 11
 
     CONTROL         \"Apply & save\", 1012, \"Button\", BS_OWNERDRAW | BS_DEFPUSHBUTTON | WS_TABSTOP, 132, 505, 78, 16
     CONTROL         \"Close\", IDCANCEL, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 216, 505, 74, 16

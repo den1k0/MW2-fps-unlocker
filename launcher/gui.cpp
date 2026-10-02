@@ -202,7 +202,7 @@ constexpr int kProfileCount = 3;
 // a cvar of its own to sit behind.
 constexpr int kIdServerEnable = 1093;
 
-// "Check for updates", on a row of its own under the build number. It writes
+// "Check for update", on a row of its own under the build number. It writes
 // nothing and reads no cvar: it is the only thing in this window that talks to
 // the network. It asks the repository for the newest published build and says
 // what it found, then opens the download page for anyone who needs the new EXE.
@@ -309,7 +309,7 @@ constexpr UINT kMsgSliderChanged = WM_APP + 13;
 constexpr UINT kMsgKeyBoxSetKey = WM_APP + 15;
 constexpr UINT kMsgKeyBoxGetKey = WM_APP + 16;
 constexpr UINT kMsgKeyChanged = WM_APP + 17;
-// The "Check for updates" request finished. Posted by the thread that made it,
+// The "Check for update" request finished. Posted by the thread that made it,
 // because the response arrives off the UI thread and the label belongs on it.
 constexpr UINT kMsgUpdateDone = WM_APP + 18;
 
@@ -1132,7 +1132,11 @@ void DrawButton(HDC dc, const RECT& rect, const std::wstring& text, bool primary
     }
 
     RECT label = rect; // DrawText takes a non-const rect
-    ::DrawTextW(dc, text.c_str(), -1, &label, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    // The box is sized to its text by the window - see FitCheckButton, which does
+    // it for the one button whose label changes - so the ellipsis is a guard
+    // against something longer than expected rather than part of the layout.
+    ::DrawTextW(dc, text.c_str(), -1, &label,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 // -----------------------------------------------------------------------------
@@ -2093,7 +2097,7 @@ void PostStatus(State& state, const std::wstring& text, Link link) {
 }
 
 // -----------------------------------------------------------------------------
-// "Check for updates".
+// "Check for update".
 //
 // The request runs on a thread of its own: it is a network round trip, and the
 // window must not freeze while it happens - the worker thread that watches for
@@ -2109,8 +2113,46 @@ int LocalBuildNumber() {
     return static_cast<int>(::wcstol(MW2_BUILD_NUMBER, nullptr, 10));
 }
 
+// Size the update button to its label. It is the only control whose text changes
+// while the window is up, and a box left at one width would either leave a field
+// of empty button beside a short label like "Checking..." or clip a long one.
+// Only the width is touched - the left edge stays on the column the build number
+// above it uses, so the button grows and shrinks to the right, and every label it
+// swaps itself for keeps the same left edge.
+constexpr int kCheckButtonPadding = 14; // each side of the label, in pixels
+
+void FitCheckButton(HWND dialog) {
+    HWND button = ::GetDlgItem(dialog, kIdCheckUpdates);
+    if (button == nullptr) {
+        return;
+    }
+
+    const std::wstring text = ControlText(dialog, kIdCheckUpdates);
+    const HFONT font = reinterpret_cast<HFONT>(::SendMessageW(dialog, WM_GETFONT, 0, 0));
+
+    int textWidth = 0;
+    HDC dc = ::GetDC(button);
+    if (dc != nullptr) {
+        const HGDIOBJ previous = font != nullptr ? ::SelectObject(dc, font) : nullptr;
+        SIZE size{};
+        if (::GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()), &size)) {
+            textWidth = size.cx;
+        }
+        if (previous != nullptr) {
+            ::SelectObject(dc, previous);
+        }
+        ::ReleaseDC(button, dc);
+    }
+
+    RECT rect{};
+    ::GetWindowRect(button, &rect);
+    ::SetWindowPos(button, nullptr, 0, 0, textWidth + 2 * kCheckButtonPadding,
+                   rect.bottom - rect.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
 void SetCheckLabel(HWND dialog, const std::wstring& text) {
     SetControlText(dialog, kIdCheckUpdates, text);
+    FitCheckButton(dialog);
     ::InvalidateRect(::GetDlgItem(dialog, kIdCheckUpdates), nullptr, TRUE);
 }
 
@@ -2135,7 +2177,7 @@ void StartUpdateCheck(HWND dialog, State& state) {
     }
     state.updateChecking = true;
     ::EnableWindow(::GetDlgItem(dialog, kIdCheckUpdates), FALSE);
-    SetCheckLabel(dialog, L"Checking for updates...");
+    SetCheckLabel(dialog, L"Checking...");
 
     HANDLE thread = ::CreateThread(nullptr, 0, &UpdateCheckProc, &state, 0, nullptr);
     if (thread == nullptr) {
@@ -2530,6 +2572,9 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         // and size the window around what is left. Doing it before the window is
         // shown means it never appears at the wrong height.
         ApplyLayout(dialog, *state);
+        // The update button's template width is only a starting point: it is sized
+        // to the label it opens with. Nothing else here resizes a control.
+        FitCheckButton(dialog);
         // The build number goes beside the buttons, where a user can read it
         // without opening anything - it is what to quote when reporting a problem.
         // In the window rather than in the title bar, because the title is the
@@ -2736,7 +2781,8 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         case kIdCheckUpdates:
             // The text is read from the control rather than written here: it is
             // replaced as the check reports back, and this is where the button
-            // and the harness both get to see it.
+            // and the harness both get to see it. The box has already been sized
+            // to that text by the window.
             DrawButton(item->hDC, item->rcItem, ControlText(dialog, kIdCheckUpdates), false,
                        (item->itemState & ODS_SELECTED) != 0, focused, disabled);
             return TRUE;
@@ -3037,9 +3083,10 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
             state->updateAvailable = false;
             SetCheckLabel(dialog, L"Could not check - " + error);
         } else if (published > local) {
-            // The label is the invitation: the next click opens the page.
+            // The label is the invitation: the next click opens the page, and it
+            // is kept short enough to fit the button without clipping.
             state->updateAvailable = true;
-            SetCheckLabel(dialog, L"Update available: build " + std::to_wstring(published) +
+            SetCheckLabel(dialog, L"Update build " + std::to_wstring(published) +
                                       L" - click to open");
         } else {
             state->updateAvailable = false;
