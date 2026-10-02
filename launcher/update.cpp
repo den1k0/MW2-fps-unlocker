@@ -3,7 +3,6 @@
 #include <windows.h>
 #include <winhttp.h>
 
-#include <cstdio>
 #include <string>
 
 namespace {
@@ -11,17 +10,26 @@ namespace {
 // Where the published build number lives. Hard-coded rather than configurable: a
 // version check that can be pointed somewhere else is a way to be told to
 // download something that is not this project.
-const wchar_t* const kHost = L"raw.githubusercontent.com";
-const wchar_t* const kPath = L"/den1k0/MW2-fps-unlocker/main/version.txt";
+//
+// The API host rather than the raw one, which is the obvious choice and the wrong
+// one: raw.githubusercontent.com is a CDN that holds every response for five
+// minutes and ignores a cache-busting query string (measured - "X-Cache: HIT",
+// with the same stale body, for a URL that had never been requested). A check
+// made just after a release therefore reported the previous number, which is
+// indistinguishable from a broken button. The contents API reads the repository
+// itself and has no such cache.
+//
+// It is not unlimited: an unauthenticated client gets 60 requests an hour per
+// address, which is far more than anyone pressing this button will use - and 403,
+// which is what running out looks like, is reported as "try again later" rather
+// than as a failure.
+const wchar_t* const kHost = L"api.github.com";
+const wchar_t* const kPath = L"/repos/den1k0/MW2-fps-unlocker/contents/version.txt";
 
 // Nobody should wait on a button for longer than this. One small text file, so
 // five seconds per stage is generous rather than tight.
 const int kTimeoutMs = 5000;
 
-// The path to the published build number, and the host it lives on. The query
-// string added at the bottom of LatestBuild is what stops a stale copy being
-// served; see the note there.
-//
 // The first run of digits in the file. version.txt is one number on one line,
 // but there is no reason to be strict about whitespace or a trailing newline.
 // Returns -1 when there is no digit at all.
@@ -67,23 +75,12 @@ int update::LatestBuild(std::wstring& error) {
             break;
         }
 
-        // Three things keep the answer current, because a stale one is
-        // indistinguishable from a broken button: a check made just after a
-        // release reported the previous number and said "up to date".
-        //
-        //   - the query string gives the CDN a URL it cannot have answered
-        //     before; raw.githubusercontent.com caches every response for five
-        //     minutes (Cache-Control: max-age=300) and answers the plain path
-        //     from its edge;
-        //   - WINHTTP_FLAG_REFRESH is the same trick at the WinHTTP end, which
-        //     keeps a copy of its own;
-        //   - and the header says it in the request as well, for anything in
-        //     between that is listening.
-        wchar_t path[128] = {};
-        ::swprintf_s(path, ARRAYSIZE(path), L"%s?cb=%I64u", kPath,
-                     static_cast<unsigned long long>(::GetTickCount64()));
-
-        request = ::WinHttpOpenRequest(connect, L"GET", path, nullptr, WINHTTP_NO_REFERER,
+        // The path used to carry a cache-busting query string. It is gone: the
+        // CDN ignored it, so it only made the request look clever. What keeps the
+        // answer current is the API host above and these two headers - the media
+        // type that asks for the file's contents rather than its JSON description,
+        // and the User-Agent GitHub wants on an API call.
+        request = ::WinHttpOpenRequest(connect, L"GET", kPath, nullptr, WINHTTP_NO_REFERER,
                                        WINHTTP_DEFAULT_ACCEPT_TYPES,
                                        WINHTTP_FLAG_SECURE | WINHTTP_FLAG_REFRESH);
         if (request == nullptr) {
@@ -91,7 +88,10 @@ int update::LatestBuild(std::wstring& error) {
             break;
         }
 
-        if (!::WinHttpSendRequest(request, L"Cache-Control: no-cache\r\n",
+        if (!::WinHttpSendRequest(request,
+                                  L"Accept: application/vnd.github.raw\r\n"
+                                  L"User-Agent: MW2Unlocker\r\n"
+                                  L"Cache-Control: no-cache\r\n",
                                   static_cast<DWORD>(-1), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
             !::WinHttpReceiveResponse(request, nullptr)) {
             error = L"could not reach GitHub";
@@ -110,6 +110,13 @@ int update::LatestBuild(std::wstring& error) {
         // file yet, so it gets its own wording rather than looking like a fault.
         if (status == 404) {
             error = L"no release published yet";
+            break;
+        }
+        // 403 is the API's rate limit, which is per address and shared with
+        // anything else on it. Saying so is more useful than "GitHub answered
+        // 403", and it is not a fault in this tool.
+        if (status == 403 || status == 429) {
+            error = L"GitHub is busy; try again later";
             break;
         }
         if (status != 200) {
