@@ -207,6 +207,14 @@ Windows Defender already flags this tool for, so the click it would save is not
 worth that. The check runs on a thread of its own, so the window never freezes
 waiting for GitHub, and it gives up after five seconds.
 
+The number comes from GitHub's contents API rather than from
+`raw.githubusercontent.com`. The raw host is a CDN that keeps every response for
+five minutes and ignores a cache-busting query string, so a check made just after a
+release would report the previous build and look broken; the API's own answers are
+allowed to be a minute old, which is the trade it makes for being current enough.
+Either way the button reports what it read rather than guessing, and says which
+build the repository is on even when that is not the one you have.
+
 Publishing a build therefore has one extra step: set `version.txt` to that build's
 number and commit it with the new EXE. Nothing else has to be kept in step - the
 number in the file is compared with the one the EXE was stamped with, and both come

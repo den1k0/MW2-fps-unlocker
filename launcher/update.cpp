@@ -16,13 +16,18 @@ namespace {
 // minutes and ignores a cache-busting query string (measured - "X-Cache: HIT",
 // with the same stale body, for a URL that had never been requested). A check
 // made just after a release therefore reported the previous number, which is
-// indistinguishable from a broken button. The contents API reads the repository
-// itself and has no such cache.
+// indistinguishable from a broken button.
 //
-// It is not unlimited: an unauthenticated client gets 60 requests an hour per
-// address, which is far more than anyone pressing this button will use - and 403,
-// which is what running out looks like, is reported as "try again later" rather
-// than as a failure.
+// The contents API is better but not instant either: its answers carry
+// "Cache-Control: public, max-age=60, s-maxage=60", so the number can be up to a
+// minute behind a release. That is the honest figure - a minute is
+// indistinguishable from "now" for anyone pressing a button, and five minutes of
+// "up to date" is not.
+//
+// It is also not unlimited: an unauthenticated client gets 60 requests an hour
+// per address, which is far more than anyone pressing this button will use - and
+// 403, which is what running out looks like, is reported as "try again later"
+// rather than as a failure.
 const wchar_t* const kHost = L"api.github.com";
 const wchar_t* const kPath = L"/repos/den1k0/MW2-fps-unlocker/contents/version.txt";
 
