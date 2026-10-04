@@ -27,9 +27,6 @@ Worth knowing:
 * If the game runs as administrator, run the EXE as administrator too.
 * If the DLL is already injected it says so. Re-injecting cannot re-run it, so
   either press **F6** twice (off, then on again) or restart the game.
-* **`closeWithGame`** in `[general]` controls what the window does: `1` (default)
-  keeps it open while the game runs and closes it when the game exits; `0` leaves
-  it open so you can still change values after quitting.
 * The window and `unlocker.ini` are the same settings: it reads the file when it
   opens and writes it when you press Apply, leaving your comments alone. An
   `unlocker.ini` next to the EXE takes priority over the stored copy under
