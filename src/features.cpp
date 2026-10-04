@@ -210,6 +210,87 @@ const DvarPreset kPresets[] = {
     // value, so anyone who wants the game back as it was sets that.
     {"timescale", "timescale", true, "0x10,0x20,0x30", "1", "", ""},
     {"phys_gravity", "phys_gravity", true, "0x10,0x20,0x30", "-800", "", ""},
+    // ---- the Debug card, and the third-person switch ----------------------------
+    // camera_thirdPerson: "Use third person view globally", registered in the block
+    // that also holds bg_forceDualWield and camera_thirdPersonOffset, cached at
+    // 0x58D790. Read as a gate four times over - 0x8A696 is a predicate that
+    // answers whether third person is forced, and 0xB9140, 0xBDDE7 and 0x198D4C
+    // are the same test over their own blocks - so 1 is what the switch writes and
+    // off hands the engine's own value back.
+    {"camera_thirdPerson", "camera_thirdPerson", false, "0x10,0x20,0x30", "1", "", ""},
+    // r_znear: "Things closer than this aren't drawn.  Reducing this increases the
+    // depth precision" - the near clip plane, a float read once at 0x24440 as
+    // `mov rax, [cache]; maxss xmm0, dword ptr [rax + 0x10]`. A value rather than a
+    // switch, and gateless like r_blur: the default here is the engine's own 4, so
+    // a box nobody touches writes what is already there. It is the one row of the
+    // "Debug" card at the foot of the window, and its box goes up to 999: the near
+    // plane is in engine units, and 100 was the window's ceiling rather than the
+    // engine's - there is nothing in the registration to stop it going further.
+    {"r_znear", "r_znear", true, "0x10,0x20,0x30", "4", "", ""},
+    //
+    // ---- the three testing switches in "Other Settings" -----------------------
+    // r_filmTweakInvert: "Tweak dev var; enable inverted video". An int registered
+    // at 0 (cache 0x8CF7A20) with flags 0x40, read once - it flips the colour of
+    // the grade, so it only shows while [r_filmTweakEnable] is on.
+    {"r_filmTweakInvert", "r_filmTweakInvert", false, "0x10,0x20,0x30", "1", "", ""},
+    // cg_footsteps: "Play footstep sounds". An int registered at **1** (cache
+    // 0x809BB0, four gate reads), so the window's switch means "mute" and the
+    // value written is 0 - the same inversion cg_drawCrosshair has. Without that
+    // the switch would write what the engine already holds and do nothing.
+    {"cg_footsteps", "cg_footsteps", false, "0x10,0x20,0x30", "0", "", ""},
+    // ui_debugMode: "Draw ui debug info on the screen." An int registered at 0
+    // (cache 0x65FEE68), read as a gate five times in multiplayer and five in
+    // single player.
+    {"ui_debugMode", "ui_debugMode", false, "0x10,0x20,0x30", "1", "", ""},
+    //
+    // ---- the two the last batch added ------------------------------------------
+    // bg_forceDualWield: "Force akimbo for all possible weapons". An int registered
+    // at 0 with flags 0xC (rva 0x8B215, cache 0x589C18) and read in three places -
+    // 0x99D8A, 0x18837E, 0x18849A - all of them weapon set-up rather than the frame
+    // loop. The window offered it as a "Force dual wield" switch for one build, and
+    // the switch was tried in a match and moved nothing: the dvar is read, but not
+    // anywhere that changes a match. The control is gone, so the section is
+    // file-only now and a value set here is still written. The name is the file's own
+    // spelling, with the capital W: the unlocker finds a dvar by its exact name
+    // string.
+    {"bg_forceDualWield", "bg_forceDualWield", false, "0x10,0x20,0x30", "1", "", ""},
+    // player_sprintSpeedScale: "The scale applied to the player speed when
+    // sprinting". A float registered at 1.5 between 0 and 2.0 (rva 0x8C17B, cache
+    // 0x58D728), read in two places (0x8F7F5, 0x90678) as `mulss reg, dword ptr
+    // [rax + 0x10]` - a multiplier, not a stored speed. Gateless like r_blur, so the
+    // section is always on and only the number moves; the default here is the
+    // engine's own 1.5, so a slider nobody has touched writes what the game already
+    // had.
+    {"player_sprintSpeedScale", "player_sprintSpeedScale", true, "0x10,0x20,0x30", "1.5", "",
+     ""},
+    // mp_paused: "If true ignore server time advancing.  Handy for taking
+    // hi-resolution screenshots without the world moving". An int registered at 0,
+    // multiplayer only, cached at 0x5AF6C8 and read once. The switch beside the
+    // sprint scale on the Debug card's last row writes the fixed 1 while it is
+    // ticked and hands the engine's own 0 back when it is not.
+    {"mp_paused", "mp_paused", false, "0x10,0x20,0x30", "1", "", ""},
+    //
+    // r_subwindow and r_debugShader were presets here for a build, one config
+    // section each — four sections in the subwindow's case, since a feature writes
+    // one value into every offset its section lists. Both worked and both were
+    // dropped after a match: the four numbers only scale the frame, and the
+    // shader-debug mode only shows how the shaders are drawn. Neither is worth a
+    // control. See docs/feature-report.md.
+    // cg_scoreboardPingText and cg_scoreboardPingGraph: the scoreboard's ping
+    // display, registered two calls apart in the scoreboard's own set-up block
+    // through the int helper. The text is registered with 0 (`xor edx, edx` at
+    // rva 0xE56A2) and the graph with 1 (`mov dl, 1` at 0xE56C1), which is why a
+    // match shows bars and no number. The window has one "Numeric Ping" switch
+    // over both, because the senses are opposite: the number is drawn only where
+    // the graph is not, so on means text 1 and graph 0.
+    //
+    // Both are read by code - the text at 0xE388E and 0xE4625, where the flag
+    // picks one of two layout tables, and the graph at 0xE3E54, as a gate:
+    // `mov rax, [cache]; cmp byte ptr [rax + 0x10], 0; je <skip>` around its
+    // drawing call. The defaults in this table are the *on* values, since a
+    // preset's default is what gets written when the section says nothing else.
+    {"cg_scoreboardPingText", "cg_scoreboardPingText", false, "0x10,0x20,0x30", "1", "", ""},
+    {"cg_scoreboardPingGraph", "cg_scoreboardPingGraph", false, "0x10,0x20,0x30", "0", "", ""},
     // cg_fov: a FLOAT. The float at dvar+0x44 reads 80.0 and behaves like the
     // max-FOV clamp, so it is exposed as the optional `max=` key.
     {"fov", "cg_fov", true, "0x10,0x20,0x30", "90", "0x44", "max"},
@@ -1181,6 +1262,30 @@ bool features::ApplyLive(const ipc::Values& values) {
                        static_cast<double>(values.timescale));
     changed |= SetLive("phys_gravity", values.serverEnabled != 0,
                        static_cast<double>(values.physGravity));
+    // The third-person switch, off until it is ticked, and the near plane, which
+    // has no gate at all and starts at the engine's own number.
+    changed |= SetLive("camera_thirdPerson", values.cameraThirdPerson != 0, 1.0);
+    changed |= SetLive("r_znear", true, static_cast<double>(values.znear));
+
+    // The three testing switches, all gateless: on writes the number above, off
+    // hands the engine's own value back.
+    changed |= SetLive("r_filmTweakInvert", values.filmInvert != 0, 1.0);
+
+    // The sprint scale, at the foot of the Debug card. Gateless like r_blur, so it
+    // goes in as a plain number every time - and its default is the engine's own
+    // 1.5, which is what keeps a slider nobody has moved a no-op rather than a
+    // change.
+    changed |=
+        SetLive("player_sprintSpeedScale", true, static_cast<double>(values.sprintSpeedScale));
+    // The switch beside it on the same row: one of the fixed-number ones, so on
+    // writes 1 and off hands the engine's own 0 back.
+    changed |= SetLive("mp_paused", values.mpPaused != 0, 1.0);
+
+    // The numeric ping: one switch over two cvars with opposite senses. Written
+    // together, and restored together - with the switch off the engine's own pair
+    // comes back, which is text 0 and graph 1, so the bars return.
+    changed |= SetLive("cg_scoreboardPingText", values.numericPing != 0, 1.0);
+    changed |= SetLive("cg_scoreboardPingGraph", values.numericPing != 0, 0.0);
 
     changed |= SetLive("sensitivity", values.sensitivityEnabled != 0,
                        static_cast<double>(values.sensitivityValue));

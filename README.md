@@ -15,21 +15,31 @@ YOUR_DIRECTORY_OF_CHOICE\MW2Unlocker.exe
 A window opens with a slider and a checkbox for the frame cap, a slider for the
 field of view, a viewmodel card whose left column moves the first-person weapon
 and whose right column adjusts the HUD safe area and the compass size, a film tweak
-card whose two columns carry six grade sliders on the left and the glow's four plus
-blur on the right, an **Other Settings** card holding six switches - music,
-fullbright, the HUD, the crosshair, the weapon model and the fog - together with
-the in-game hotkey and, on that same row, a box for whether the window closes when
-the game does, and a **Server** card below it holding the two testing sliders — the
-timescale and the physics gravity, which starts at -800 — behind one switch that
-gates both of them and stays folded until it is ticked. The viewmodel, film tweak
-and Server cards all fold away like that, so the window is only as tall as the
+card whose two columns carry three grade sliders on the left and the glow's four on
+the right with the grade's invert switch under them, an **Other Settings** card
+holding nine switches in three columns - music,
+fullbright, the HUD, the crosshair, the weapon model, the fog, the numeric
+ping and the third-person camera - together with
+the two hotkeys side by side and, spanning the width under them, a box for whether
+the window closes when the game does. Below that, a **Debug** card holds the two testing sliders — the
+timescale and the prop gravity, which starts at -800 — behind one switch that
+gates them and stays folded until it is ticked, and, on a second row beside each
+other, blur (0.00 to 32.00) and the near clip plane (0.00 to 999.00), with the
+sprint speed scale (0.00 to 2.00, the game's own 1.5) and an **MP paused** switch —
+which stops the world for a clean screenshot — sharing the third row. The viewmodel, film tweak
+and Debug cards all fold away like that, so the window is only as tall as the
 settings it is showing. The strip along the top
 carries the profile box as well: a dropdown of three slots, kept as files under
 `%LOCALAPPDATA%\MW2Unlocker\profiles`. The window opens on Profile 1 and loads it
 if it exists; choosing another loads that one, and **Apply & save** stores what the
 window shows into the slot it is on, so a whole set of settings can be put back in
-one go. A line at the
-top warns that some settings only take effect once you rejoin a match, a small dot
+one go. **Next profile** is a hotkey, with its box beside the toggle key's: one press
+of it in game does both halves at once — the DLL polls the key, asks the window for
+the next slot, and the window loads and applies it — so a match can be switched
+between profiles from the keyboard. Both hotkeys are global: they live in the working
+config's `[general]` section, so no profile can move them. A line at the
+top names the yellow it labels those settings in, so you can see at a glance which
+ones are only re-read once you rejoin a match, a small dot
 beside the status line at the bottom turns green once the game is answering, yellow
 while it is still looking for it, and red if something failed, and the build number
 sits beside the buttons — stamped afresh on every build — so you can say which

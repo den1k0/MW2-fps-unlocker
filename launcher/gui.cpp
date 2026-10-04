@@ -81,12 +81,12 @@ constexpr int kIdFilmBrightnessSlider = 1036;
 constexpr int kIdFilmBrightnessValue = 1037;
 constexpr int kIdFilmDesaturationSlider = 1038;
 constexpr int kIdFilmDesaturationValue = 1039;
-constexpr int kIdFilmLightTintSlider = 1040;
-constexpr int kIdFilmLightTintValue = 1041;
-constexpr int kIdFilmMediumTintSlider = 1042;
-constexpr int kIdFilmMediumTintValue = 1043;
-constexpr int kIdFilmDarkTintSlider = 1044;
-constexpr int kIdFilmDarkTintValue = 1045;
+// 1040..1045 and the labels 1052..1054 were the three tint rows - Light, Medium
+// and Dark. They are out of the window now: each is a grey level written into the
+// first three components of a colour dvar, and moving them changed very little, so
+// the film card is three rows shorter without them. Their config sections stay, so
+// a value set in the file is still applied - the window simply has no control for
+// it any more, which leaves the loaded value alone rather than overwriting it.
 
 // The row labels carry ids, although nothing ever asks them for their text,
 // because the two collapsible cards move and hide whole rows by id. An
@@ -97,9 +97,6 @@ constexpr int kIdGunZLabel = 1048;
 constexpr int kIdFilmContrastLabel = 1049;
 constexpr int kIdFilmBrightnessLabel = 1050;
 constexpr int kIdFilmDesaturationLabel = 1051;
-constexpr int kIdFilmLightTintLabel = 1052;
-constexpr int kIdFilmMediumTintLabel = 1053;
-constexpr int kIdFilmDarkTintLabel = 1054;
 constexpr int kIdToggleKeyLabel = 1055;
 
 // The glow column of the film tweak card. Its switch writes four cvars at once -
@@ -211,6 +208,60 @@ constexpr int kIdServerEnable = 1093;
 // worse. See launcher/update.h.
 constexpr int kIdCheckUpdates = 1094;
 
+// "Numeric Ping", the seventh switch in the Other Settings card, at the top of a
+// third column of its own. The card's names were shortened - "Disable Music",
+// "Fullbright" and the rest - which is what made three columns fit across it, and
+// the ping is the switch that made the third one worth having: it has no rows of
+// its own, so it sits alone in it and the card went back to three rows. Like the
+// crosshair switch it is one control over two cvars with opposite senses:
+// cg_scoreboardPingText (registered 0) puts a number on the scoreboard and
+// cg_scoreboardPingGraph (registered 1) draws bars, and the number is only visible
+// where the graph is not - so the switch writes text 1 and graph 0, and off
+// restores the engine's own pair.
+constexpr int kIdNumericPing = 1095;
+
+// The third-person switch, in "Other Settings" with the other switches.
+constexpr int kIdCameraEnable = 1096;
+// The near plane: the last row of the card at the foot of the window, which is
+// the card that started life as "Server" and took the near plane in when the
+// card under it went. It was a label, a box and a hint for a while; the hint is
+// gone, because the label says which value it is and the range is the box's own
+// business.
+constexpr int kIdZnearLabel = 1097;
+constexpr int kIdZnearValue = 1098;
+
+// The next-profile hotkey. Its box sits under the toggle key's in "Other
+// Settings" and is the same control, so it is rebound the same way - click to
+// step, or the arrow keys once it has focus. The key itself is polled by the DLL,
+// which cannot switch profiles on its own, so it asks this window; see the
+// registered message in DialogProc.
+constexpr int kIdNextProfileKey = 1101;
+constexpr int kIdNextProfileLabel = 1102;
+
+// The film grade's invert flag, which lives in the film tweak card: a switch under
+// the card's two columns of sliders. It is a switch rather than a slider because
+// the cvar is a flag, and it rides the film tweak switch like the grade's rows do.
+constexpr int kIdFilmInvert = 1103;
+
+// The sprint scale. The batch that added it put it in "Other Settings"; it now
+// sits at the foot of the *Debug* card, with the other gateless values.
+//
+// player_sprintSpeedScale is a multiplier the engine registers at 1.5 and caps at
+// 2.0, so the slider's top is that cap rather than a guess. The switch that
+// arrived beside it, for bg_forceDualWield, was tried in a match and did nothing,
+// so it has been taken out again - that section is file-only now, like the other
+// settings that were tried and discarded.
+constexpr int kIdSprintSpeedLabel = 1107;
+constexpr int kIdSprintSpeedSlider = 1108;
+constexpr int kIdSprintSpeedValue = 1109;
+
+// mp_paused, the switch that sits beside the sprint scale on the Debug card's
+// last row. "If true ignore server time advancing.  Handy for taking
+// hi-resolution screenshots without the world moving" - the binary's own words.
+// An int registered at 0, so the switch writes the fixed 1 while it is ticked and
+// hands the engine's own 0 back when it is not.
+constexpr int kIdMpPaused = 1110;
+
 // The frame cap accepts anything up to 1000 because the engine does not enforce
 // the 100 its own registration declares: 250 and 333 were measured working.
 constexpr int kFpsMin = 0;
@@ -226,22 +277,25 @@ constexpr int kFovMax = 179;
 constexpr int kGunMin = -1000;
 constexpr int kGunMax = 1000;
 
-// The film tweak's six sliders, in hundredths. These follow the game's own
+// The film tweak's three sliders, in hundredths. These follow the game's own
 // registered domains rather than widening them: contrast has nowhere to go below
-// 0, and the desaturation the game considers valid starts at -2. The tints are
-// colour dvars whose defaults all sit near 1 - below 0 they invert the channel
-// rather than dim it - so 0.00 to 2.00 is the useful span.
+// 0, and the desaturation the game considers valid starts at -2.
+//
+// The three tints that used to sit under them - Light, Medium and Dark, the last
+// three of the grade's six parameters - are out of the window. They are colour
+// dvars whose defaults all sit near 1 with 0.00 to 2.00 as the useful span, and
+// moving them changed very little, so the rows went and the card is three rows
+// shorter. Their sections are still in the config: a value set there is applied,
+// and WriteValuesTo writes the loaded value straight back.
 //
 // The defaults are the registered ones, so the sliders start where the game
-// does: contrast 1.4, brightness 0, desaturation 0.2, tints 1.1, 0.9 and 0.7.
+// does: contrast 1.4, brightness 0, desaturation 0.2.
 constexpr int kContrastMin = 0;
 constexpr int kContrastMax = 300;
 constexpr int kBrightnessMin = -100;
 constexpr int kBrightnessMax = 100;
 constexpr int kDesaturationMin = -100;
 constexpr int kDesaturationMax = 200;
-constexpr int kTintMin = 0;
-constexpr int kTintMax = 200;
 
 // The glow tweak's four parameters, in hundredths, with the values the engine
 // registers them at as the defaults below. The ceilings are the window's own
@@ -262,8 +316,14 @@ constexpr int kGlowDesatMax = 100;       // 0.00 ..   1.00
 // from nothing to a full blur. It has no gate in the game, so it is written
 // whenever the window saves - it sits at the foot of the glow column for
 // grouping, not because the glow switch turns it on.
+// The blur slider now runs to 32.00, which is the registration's own ceiling: the
+// float helper takes its maximum in xmm3, and r_blur's registration reads it from
+// xmm7, which the block last loaded from rva 0x3CAA74 (32.0f) a dozen
+// registrations earlier - its minimum is 0 and its default 0, and the reader at
+// 0x637D5 only tests the value against zero and then squares it into a length, so
+// nothing clamps it at run time either.
 constexpr int kBlurMin = 0;
-constexpr int kBlurMax = 100;            // 0.00 ..  1.00
+constexpr int kBlurMax = 3200;           // 0.00 .. 32.00
 
 // The HUD safe area, in hundredths. The engine registers all four floats between
 // 0 and 1, and reads them as fractions of the screen, so 0.00 to 1.00 is the
@@ -285,19 +345,46 @@ constexpr int kCompassMax = 500;         // 0.10 ..  5.00
 
 // The two testing sliders below the switches.
 //
-// timescale is the game's own clock, a float registered at 1.0, and it is shown
-// in hundredths like the other floats: 0.10 is a crawl and 5.00 is five times
-// speed, which is already far past anything playable.
+// timescale is the game's own clock, a float registered at 1.0, shown in
+// hundredths like the other floats. Its floor is *not* the engine's: the
+// registration passes 0.001 as the minimum and nothing clamps it afterwards - the
+// getter at rva 0x1F427D is three instructions, a load of the dvar's value, a
+// multiply by com_timescale and a return - so the engine would happily run at
+// 0.001. The floor here is measured instead: below about 0.5 the game's own time
+// sync fights the slowdown, pulling the frame clock back as fast as it is pushed
+// forward. What the player sees is not a slower game but rubberbanding, so the
+// slider starts at 0.50 and its ceiling is 5.00, already far past anything
+// playable. The config's own section takes any value it is given, and repeats the
+// warning.
 //
 // phys_gravity is "Physics gravity in units/sec^2", registered at 800, and it is
 // shown in whole units because that is how it is quoted - the game's own 800 and
 // the -800 a lift-off is usually done with. The window's range is its own: the
 // registration passes no useful ceiling, and 2000 either way is more than a match
 // can be played at.
-constexpr int kTimescaleMin = 10;
-constexpr int kTimescaleMax = 500;       // 0.10 ..  5.00
+constexpr int kTimescaleMin = 50;
+constexpr int kTimescaleMax = 500;       // 0.50 ..  5.00
 constexpr int kGravityMin = -2000;
 constexpr int kGravityMax = 2000;
+
+// r_znear, in hundredths, the one value the Debug card carries. The engine's own
+// value is 4.00, which is where the box starts. The ceiling is 999.00: the near
+// plane is in engine units and nothing in the registration bounds it, so 100 was
+// the window's own guess rather than the engine's - and past that the world
+// starts disappearing into the near clip. 0.00 is legal: the reader takes the
+// value as `maxss` against whatever the caller already has.
+constexpr int kZnearMin = 0;
+constexpr int kZnearMax = 99900;         // 0.00 .. 999.00
+
+// player_sprintSpeedScale, in hundredths: "The scale applied to the player speed
+// when sprinting". A float registered at **1.5** between 0 and **2.0**, so this is
+// the engine's own whole domain and 1.50 - the registered value - is where the
+// slider starts, which is what keeps a slider nobody has touched a no-op.
+//
+// Worth knowing before moving it: 1.00, which reads like "normal", is two thirds of
+// the speed the game actually ships.
+constexpr int kSprintSpeedMin = 0;
+constexpr int kSprintSpeedMax = 200;     // 0.00 .. 2.00
 
 // Slot this process's messages. The window is modal and single-instance, so one
 // set of brushes and fonts is enough.
@@ -337,6 +424,17 @@ constexpr COLORREF kGreenPressed = RGB(0x74, 0x94, 0x3B);
 constexpr COLORREF kAmber = RGB(0xD8, 0xA9, 0x3A);
 constexpr COLORREF kRed = RGB(0xC4, 0x54, 0x48);
 
+// The colour of the four settings the game only re-reads when a match is set up:
+// the music and fullbright switches, and the safe area's two "adjusted" labels.
+// A plain yellow, and deliberately none of the three colours already in use - not
+// the accent orange of the card titles, not the green of a switch that is on, and
+// not the indicator's amber - so a rejoin label reads as neither a header nor a
+// warning about the unlocker itself. It stays on the label whether the switch is
+// on or off, because what needs the rejoin is the setting rather than its state.
+// The note above the first card spells the colour out and draws that one word in
+// it - see DrawNote.
+constexpr COLORREF kRejoin = RGB(0xFF, 0xEB, 0x3B);
+
 // One window per process, so file-scope handles are simpler here than threading
 // them through every drawing call. Created in Run, released after the dialog.
 HBRUSH g_backgroundBrush = nullptr;
@@ -347,8 +445,11 @@ HFONT g_noteFont = nullptr;
 
 // The dialog's six cards, in dialog units: the frame cap and the field of view
 // side by side across the top, then the viewmodel, the film tweak, the catch-all
-// that holds the hotkey and the switches, and the server settings at the foot.
-// ApplyLayout shortens the two collapsible ones when their rows are hidden.
+// that holds the hotkey and the switches, and the "Debug" card at the foot. That
+// last one is the card that used to be "Server" - it has the two testing
+// settings and the near plane, which used to be a card of its own under it, and
+// the card under it is what went rather than a row. ApplyLayout shortens the two
+// collapsible ones when their rows are hidden, and the Debug card with them.
 //
 // The viewmodel and film cards each carry two switches and two columns, so their
 // rectangles cover the taller of the two columns.
@@ -362,21 +463,21 @@ const RECT kCardUnits[kCardCount] = {
     {10, 18, 145, 78},   // frame rate cap: the left half of the top row
     {155, 18, 290, 78},  // field of view: the right half of the top row
     {10, 83, 290, 170},  // viewmodel on the left, HUD safe area on the right
-    {10, 175, 290, 299}, // film tweak: grade on the left, glow and blur on the right
-    {10, 304, 290, 395}, // other settings: the hotkey, the close box and the switches
-    {10, 400, 290, 467}, // server: the switch and, under it, the testing pair
+    {10, 175, 290, 271}, // film tweak: the grade on the left, the glow on the right
+    {10, 276, 290, 361}, // other settings: the two hotkeys and the nine switches
+    {10, 366, 290, 447}, // debug: the testing pair, blur, the near plane, sprint + mp_paused
 };
 
 // The height the template asks for, in dialog units. ApplyLayout takes the two
 // collapsible cards' current heights off that.
 //
-// It has to be the template's own height and not a unit less: the button row ends
-// at 521, and taking the template's own 527 is what keeps the last few pixels of
-// the buttons inside the client area - the frame is slightly taller than the
-// difference ApplyLayout measures. Six units under the buttons is the bottom
-// margin: it measures about eleven pixels, which is what the harness's fit check
-// looks for.
-constexpr int kDialogHeight = 539;
+// It has to be the template's own height and not a unit less: the last row, the
+// update button's, ends at 513, and taking the template's own 519 is what keeps
+// the last few pixels of the controls inside the client area - the frame is
+// slightly taller than the difference ApplyLayout measures. Six units under the
+// last row is the bottom margin: it measures about eleven pixels, which is what
+// the harness's fit check looks for.
+constexpr int kDialogHeight = 519;
 
 // The same cards in pixels, converted whenever the window is re-laid out.
 RECT g_cards[kCardCount] = {};
@@ -397,16 +498,18 @@ RECT g_cards[kCardCount] = {};
 // line moved down again when the testing pair grew into a card of its own, and the
 // dot moved with it. It moved back up when the switch grid was balanced, the card
 // lost its spare row, the note's band was shortened and the top row became two
-// half-width cards, and up once more when the server card grew a switch of its
-// own.
-const RECT kStatusDotUnits = {12, 478, 23, 489};
+// half-width cards, up once more when the server card grew a switch of its own,
+// up a row again when the numeric ping took a third column in Other Settings, and
+// up once more when the card at the foot absorbed the near plane and the row of
+// buttons moved with it.
+const RECT kStatusDotUnits = {12, 458, 23, 469};
 
 // The box the status line and the dot sit in, in dialog units. It is drawn by the
 // window rather than declared as a control, so it is not in the template; the
 // status control's own rectangle (26,479 to 288,497) sits inside it, and takes
 // the card brush so it blends into it. The launcher moves it by the same shift
 // the status line takes - see ApplyLayout.
-const RECT kStatusPanelUnits = {10, 473, 290, 501};
+const RECT kStatusPanelUnits = {10, 453, 290, 481};
 
 // How far the dot and the box around it have to move from the template's
 // position, in dialog units: the sum of the collapsible cards' shifts, which
@@ -452,9 +555,6 @@ struct State {
     int filmContrast = 140;    // 1.40, the game's own default
     int filmBrightness = 0;
     int filmDesaturation = 20; // 0.20
-    int filmLightTint = 110;   // 1.10 - these three are grey levels, written to
-    int filmMediumTint = 90;   // the first three components of a colour dvar
-    int filmDarkTint = 70;     // 0.70
 
     // The glow tweak, in hundredths like every other slider here. The defaults
     // are the values the engine registers, so a slider left alone changes
@@ -485,8 +585,24 @@ struct State {
     // in hundredths and gravity in whole units, both at the engine's neutral
     // numbers, so a slider nobody touches changes nothing.
     bool crosshairHidden = false;
+    bool numericPingOn = false;
     int timescale = 100; // 1.00 - the game's own clock
     int gravity = -800;  // in whole units; -800 is the "moon" end, 800 is neutral
+
+    // r_znear, in hundredths, at the value the engine registers so that a box
+    // nobody touches writes what is already there. It has no slider, so the state
+    // is where a typed value lives between SyncControls and ReadControls - the box
+    // text is not read back the way a slider's position is.
+    int znear = 400; // 4.00
+
+    // The sprint scale, in hundredths. It starts at the engine's own 1.5, for the
+    // same reason the near plane starts at 4: the window writes what the game
+    // already had until somebody moves it.
+    int sprintScale = 150; // 1.50
+
+    // The mp_paused switch beside it. Off: it is a "freeze the world" flag, not a
+    // state the game should be in by default.
+    bool mpPausedOn = false;
 
     // A launcher setting, not a game cvar: it lives in [general] and says whether
     // this window closes itself when the game exits.
@@ -510,6 +626,10 @@ struct State {
     bool glowOn = false;       // the glow tweak's switch, off like the rest
     bool safeAreaOn = false;   // the safe area's switch, off as well
     bool serverOn = false;     // the testing pair's switch: off, so neither is written
+    bool cameraThirdPersonOn = false; // off: third person is not what the game does
+    // The film grade's invert flag. Off for the same reason as the rest of them:
+    // it changes what the game draws.
+    bool filmInvertOn = false;
     bool musicOn = false;      // these four are off by default as well: they
     bool fullbrightOn = false; // change the game rather than fixing something
     bool hudOn = false;
@@ -552,6 +672,14 @@ bool* CheckState(State& state, int id) {
         return &state.safeAreaOn;
     case kIdCrosshairEnable:
         return &state.crosshairHidden;
+    case kIdNumericPing:
+        return &state.numericPingOn;
+    case kIdCameraEnable:
+        return &state.cameraThirdPersonOn;
+    case kIdFilmInvert:
+        return &state.filmInvertOn;
+    case kIdMpPaused:
+        return &state.mpPausedOn;
     case kIdServerEnable:
         return &state.serverOn;
     case kIdCloseWithGame:
@@ -1019,8 +1147,13 @@ LRESULT CALLBACK KeyBoxProc(HWND window, UINT message, WPARAM wparam, LPARAM lpa
 // -----------------------------------------------------------------------------
 // Owner-drawn controls.
 // -----------------------------------------------------------------------------
+// The label's colour is a parameter because the four settings the game only
+// re-reads when a match is set up are labelled in the rejoin colour - see kRejoin
+// - rather than in the body text's off-white, and those four are drawn here
+// rather than declared as statics, so they cannot be coloured by id. Everything
+// else leaves it at the default, which is that off-white.
 void DrawCheckbox(HDC dc, const RECT& rect, const std::wstring& text, bool checked, bool focused,
-                  bool disabled) {
+                  bool disabled, COLORREF labelColour = kText) {
     ::FillRect(dc, &rect, g_cardBrush);
 
     constexpr int kBox = 14;
@@ -1056,7 +1189,7 @@ void DrawCheckbox(HDC dc, const RECT& rect, const std::wstring& text, bool check
     }
 
     ::SetBkMode(dc, TRANSPARENT);
-    ::SetTextColor(dc, disabled ? kTextDim : kText);
+    ::SetTextColor(dc, disabled ? kTextDim : labelColour);
 
     RECT label{box.right + 9, rect.top, rect.right, rect.bottom};
     ::DrawTextW(dc, text.c_str(), -1, &label, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -1139,6 +1272,45 @@ void DrawButton(HDC dc, const RECT& rect, const std::wstring& text, bool primary
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
+// The note above the first card. It is one sentence with the name of the rejoin
+// colour in the middle of it - "Settings coloured in yellow will be applied after
+// match rejoin." - and a static control can only be given one text colour, so the
+// note is declared SS_OWNERDRAW in the template and drawn here as three runs
+// instead: the sentence in the dim body colour, and the one word naming the colour
+// in that colour. The runs are measured with the control's own font - WM_INITDIALOG
+// gives it one three quarters the size of the window's - and never with the
+// window's. The word is a literal here rather than read out of the control's text,
+// because the runs have to be measured and placed separately anyway.
+void DrawNote(HDC dc, const RECT& rect, HWND control) {
+    ::FillRect(dc, &rect, g_backgroundBrush);
+    ::SetBkMode(dc, TRANSPARENT);
+
+    const wchar_t before[] = L"Settings coloured in ";
+    const wchar_t colour[] = L"yellow";
+    const wchar_t after[] = L" will be applied after match rejoin.";
+
+    const HFONT font = reinterpret_cast<HFONT>(::SendMessageW(control, WM_GETFONT, 0, 0));
+    const HGDIOBJ previous = font != nullptr ? ::SelectObject(dc, font) : nullptr;
+
+    SIZE leading{};
+    SIZE word{};
+    ::GetTextExtentPoint32W(dc, before, ARRAYSIZE(before) - 1, &leading);
+    ::GetTextExtentPoint32W(dc, colour, ARRAYSIZE(colour) - 1, &word);
+
+    const int y = rect.top + ((rect.bottom - rect.top) - leading.cy) / 2;
+
+    ::SetTextColor(dc, kTextDim);
+    ::TextOutW(dc, rect.left, y, before, ARRAYSIZE(before) - 1);
+    ::SetTextColor(dc, kRejoin);
+    ::TextOutW(dc, rect.left + leading.cx, y, colour, ARRAYSIZE(colour) - 1);
+    ::SetTextColor(dc, kTextDim);
+    ::TextOutW(dc, rect.left + leading.cx + word.cx, y, after, ARRAYSIZE(after) - 1);
+
+    if (previous != nullptr) {
+        ::SelectObject(dc, previous);
+    }
+}
+
 // -----------------------------------------------------------------------------
 // Window state.
 // -----------------------------------------------------------------------------
@@ -1219,14 +1391,15 @@ void SetSliderPosition(HWND dialog, int id, int position) {
                    0);
 }
 
-void SetKeyBoxKey(HWND dialog, int key) {
-    ::SendMessageW(::GetDlgItem(dialog, kIdToggleKey), kMsgKeyBoxSetKey, static_cast<WPARAM>(key),
-                   0);
+// One helper per direction, both taking the control's id: there are two of these
+// boxes now, and the toggle key's was the only one for long enough that the id
+// used to be written in.
+void SetKeyBoxKey(HWND dialog, int id, int key) {
+    ::SendMessageW(::GetDlgItem(dialog, id), kMsgKeyBoxSetKey, static_cast<WPARAM>(key), 0);
 }
 
-int KeyBoxKey(HWND dialog) {
-    return static_cast<int>(
-        ::SendMessageW(::GetDlgItem(dialog, kIdToggleKey), kMsgKeyBoxGetKey, 0, 0));
+int KeyBoxKey(HWND dialog, int id) {
+    return static_cast<int>(::SendMessageW(::GetDlgItem(dialog, id), kMsgKeyBoxGetKey, 0, 0));
 }
 
 // Grey out whatever belongs to a switched-off feature, so the window shows at a
@@ -1253,12 +1426,6 @@ void UpdateEnabledState(HWND dialog, State& state) {
     ::EnableWindow(::GetDlgItem(dialog, kIdFilmBrightnessValue), state.filmTweakOn);
     ::EnableWindow(SliderHandle(dialog, kIdFilmDesaturationSlider), state.filmTweakOn);
     ::EnableWindow(::GetDlgItem(dialog, kIdFilmDesaturationValue), state.filmTweakOn);
-    ::EnableWindow(SliderHandle(dialog, kIdFilmLightTintSlider), state.filmTweakOn);
-    ::EnableWindow(::GetDlgItem(dialog, kIdFilmLightTintValue), state.filmTweakOn);
-    ::EnableWindow(SliderHandle(dialog, kIdFilmMediumTintSlider), state.filmTweakOn);
-    ::EnableWindow(::GetDlgItem(dialog, kIdFilmMediumTintValue), state.filmTweakOn);
-    ::EnableWindow(SliderHandle(dialog, kIdFilmDarkTintSlider), state.filmTweakOn);
-    ::EnableWindow(::GetDlgItem(dialog, kIdFilmDarkTintValue), state.filmTweakOn);
 
     // The glow column of the same card, on the same footing: its sliders do
     // nothing at all until its own switch has opened the four gates.
@@ -1280,11 +1447,14 @@ void UpdateEnabledState(HWND dialog, State& state) {
     ::EnableWindow(SliderHandle(dialog, kIdCompassSlider), state.safeAreaOn);
     ::EnableWindow(::GetDlgItem(dialog, kIdCompassValue), state.safeAreaOn);
 
-    // The two testing rows belong to the Server card's switch.
+    // The Server card's rows - the two testing values - belong to its switch.
     ::EnableWindow(SliderHandle(dialog, kIdTimescaleSlider), state.serverOn);
     ::EnableWindow(::GetDlgItem(dialog, kIdTimescaleValue), state.serverOn);
     ::EnableWindow(SliderHandle(dialog, kIdGravitySlider), state.serverOn);
     ::EnableWindow(::GetDlgItem(dialog, kIdGravityValue), state.serverOn);
+    // The near-plane box in the Debug card is deliberately not in this list. It has
+    // no gate of its own, like blur's slider: it is live whenever the window is
+    // open, and what it starts at is what the engine itself holds.
 
     // Redraw the boxes, because a disabled owner-drawn button does not repaint
     // itself when the state changes.
@@ -1351,9 +1521,7 @@ const int kFilmRows[] = {
     kIdFilmContrastLabel,     kIdFilmContrastSlider,     kIdFilmContrastValue,
     kIdFilmBrightnessLabel,   kIdFilmBrightnessSlider,   kIdFilmBrightnessValue,
     kIdFilmDesaturationLabel, kIdFilmDesaturationSlider, kIdFilmDesaturationValue,
-    kIdFilmLightTintLabel,    kIdFilmLightTintSlider,    kIdFilmLightTintValue,
-    kIdFilmMediumTintLabel,   kIdFilmMediumTintSlider,   kIdFilmMediumTintValue,
-    kIdFilmDarkTintLabel,     kIdFilmDarkTintSlider,     kIdFilmDarkTintValue,
+    kIdFilmInvert,            // the invert switch, under both columns
 };
 
 // The glow column's sliders and labels, but not its switch: the switch is the
@@ -1363,16 +1531,22 @@ const int kGlowRows[] = {
     kIdGlowIntensityLabel, kIdGlowIntensitySlider, kIdGlowIntensityValue,
     kIdGlowCutoffLabel,    kIdGlowCutoffSlider,    kIdGlowCutoffValue,
     kIdGlowDesatLabel,     kIdGlowDesatSlider,     kIdGlowDesatValue,
-    kIdBlurLabel,          kIdBlurSlider,          kIdBlurValue,
 };
 
 // The safe-area column of the viewmodel card. Its switch is the card's second
 // header, so it is not in here: the rows come and go under it.
-// The Server card's two rows. Its switch is the card's header, so it is not in
-// here either.
+// The "Debug" card's rows: the two testing settings, which its switch gates, and
+// three settings with no gate of their own - blur, moved in here from the glow
+// column, the near plane, and the sprint scale, moved down from "Other Settings".
+// All of them are written either way; being in this list only means their rows are
+// in reach while the card is open.
 const int kServerRows[] = {
-    kIdTimescaleLabel, kIdTimescaleSlider, kIdTimescaleValue,
-    kIdGravityLabel,   kIdGravitySlider,   kIdGravityValue,
+    kIdTimescaleLabel,   kIdTimescaleSlider,   kIdTimescaleValue,
+    kIdGravityLabel,     kIdGravitySlider,     kIdGravityValue,
+    kIdBlurLabel,        kIdBlurSlider,        kIdBlurValue,
+    kIdZnearLabel,       kIdZnearValue,
+    kIdSprintSpeedLabel, kIdSprintSpeedSlider, kIdSprintSpeedValue,
+    kIdMpPaused,         // the switch beside the sprint scale
 };
 
 const int kSafeRows[] = {
@@ -1399,8 +1573,11 @@ void SnapshotLayout(HWND dialog) {
     for (HWND child = ::GetWindow(dialog, GW_CHILD); child != nullptr;
          child = ::GetWindow(child, GW_HWNDNEXT)) {
         const int id = ::GetDlgCtrlID(child);
-        // An unlabelled static has id -1, and none of those ever moves: they all
-        // sit in the two cards that cannot collapse.
+        // An unlabelled static has id -1, and none of those ever moves: the ones
+        // in this template all sit in the cards that cannot collapse. A note
+        // inside a card that folds has to carry an id for the same reason - the
+        // Debug card's hint is 1100 - and leaving one at -1 is how it ended up
+        // 102 px below the bottom of the window the first time it was added.
         if (id <= 0) {
             continue;
         }
@@ -1430,10 +1607,13 @@ void ApplyLayout(HWND dialog, const State& state) {
     const PlacedControl* safeFirstRow = FindPlaced(kIdSafeAreaAdjHSlider);
     const PlacedControl* filmSwitch = FindPlaced(kIdFilmTweakEnable);
     const PlacedControl* filmFirstRow = FindPlaced(kIdFilmContrastSlider);
-    const PlacedControl* filmLastRow = FindPlaced(kIdFilmDarkTintSlider);
+    // The last row of the film card is the glow column's Desat, not the invert
+    // switch: the invert shares the fourth row with it now, and it is the slider
+    // that reaches furthest down.
+    const PlacedControl* filmLastRow = FindPlaced(kIdGlowDesatSlider);
     const PlacedControl* serverSwitch = FindPlaced(kIdServerEnable);
     const PlacedControl* serverFirstRow = FindPlaced(kIdTimescaleSlider);
-    const PlacedControl* serverLastRow = FindPlaced(kIdGravitySlider);
+    const PlacedControl* serverLastRow = FindPlaced(kIdSprintSpeedSlider);
     if (gunSwitch == nullptr || gunFirstRow == nullptr || gunLastRow == nullptr ||
         safeSwitch == nullptr || safeFirstRow == nullptr || filmSwitch == nullptr ||
         filmFirstRow == nullptr || filmLastRow == nullptr || serverSwitch == nullptr ||
@@ -1518,19 +1698,25 @@ void ApplyLayout(HWND dialog, const State& state) {
     if (!viewmodelCardOpen) {
         cards[2].bottom = gunSwitch->units.bottom + kCardGap;
     }
-    cards[3].top += gunDelta;
-    cards[3].bottom += gunDelta;
-    cards[4].top += gunDelta;
-    cards[4].bottom += gunDelta;
-    cards[5].top += gunDelta;
-    cards[5].bottom += gunDelta;
+    for (int i = 0; i < kCardCount; ++i) {
+        // A card collects the shift of every collapsible card above it: the
+        // viewmodel is card 2, the film tweak card 3, and "Debug" is card 5 - the
+        // last one, so nothing shifts by the server's delta but the controls
+        // themselves, which the loop over the placed controls above handles. A
+        // loop rather than one line per card, because the last two additions to
+        // this window both forgot a line here.
+        if (i >= 3) {
+            cards[i].top += gunDelta;
+            cards[i].bottom += gunDelta;
+        }
+        if (i >= 4) {
+            cards[i].top += filmDelta;
+            cards[i].bottom += filmDelta;
+        }
+    }
     if (!filmCardOpen) {
         cards[3].bottom = filmSwitch->units.bottom + kCardGap + gunDelta;
     }
-    cards[4].top += filmDelta;
-    cards[4].bottom += filmDelta;
-    cards[5].top += filmDelta;
-    cards[5].bottom += filmDelta;
     if (!serverCardOpen) {
         cards[5].bottom = serverSwitch->units.bottom + kCardGap + gunDelta + filmDelta;
     }
@@ -1599,11 +1785,14 @@ void SyncControls(HWND dialog, State& state) {
 
     state.musicOn = values.musicEnabled != 0;
     state.fullbrightOn = values.fullbrightEnabled != 0;
+    state.filmInvertOn = values.filmInvert != 0;
+    state.mpPausedOn = values.mpPaused != 0;
     state.hudOn = values.hudEnabled != 0;
     state.gunOn = values.gunEnabled != 0;
     state.fogOn = values.fogEnabled != 0;
     state.filmTweakOn = values.filmTweakEnabled != 0;
     state.glowOn = values.glowEnabled != 0;
+    state.cameraThirdPersonOn = values.cameraThirdPerson != 0;
 
     // The viewmodel offsets have their own flag. Reading gunEnabled here instead
     // meant the tick mirrored the "hide the weapon model" switch, so a
@@ -1638,18 +1827,10 @@ void SyncControls(HWND dialog, State& state) {
     SetControlText(dialog, kIdFilmBrightnessValue, FormatHundredths(state.filmBrightness));
     SetControlText(dialog, kIdFilmDesaturationValue, FormatHundredths(state.filmDesaturation));
 
-    state.filmLightTint = ClampInt(ToHundredths(values.filmLightTint), kTintMin, kTintMax);
-    state.filmMediumTint = ClampInt(ToHundredths(values.filmMediumTint), kTintMin, kTintMax);
-    state.filmDarkTint = ClampInt(ToHundredths(values.filmDarkTint), kTintMin, kTintMax);
-    SetSliderRange(dialog, kIdFilmLightTintSlider, kTintMin, kTintMax);
-    SetSliderRange(dialog, kIdFilmMediumTintSlider, kTintMin, kTintMax);
-    SetSliderRange(dialog, kIdFilmDarkTintSlider, kTintMin, kTintMax);
-    SetSliderPosition(dialog, kIdFilmLightTintSlider, state.filmLightTint);
-    SetSliderPosition(dialog, kIdFilmMediumTintSlider, state.filmMediumTint);
-    SetSliderPosition(dialog, kIdFilmDarkTintSlider, state.filmDarkTint);
-    SetControlText(dialog, kIdFilmLightTintValue, FormatHundredths(state.filmLightTint));
-    SetControlText(dialog, kIdFilmMediumTintValue, FormatHundredths(state.filmMediumTint));
-    SetControlText(dialog, kIdFilmDarkTintValue, FormatHundredths(state.filmDarkTint));
+    // The three tint sliders that stood here are gone from the window. Their
+    // values are still read from the config by LoadValuesFrom and written back by
+    // WriteValuesTo, so a tint set in the file survives - there is simply no
+    // control to move it with any more.
 
     state.glowRadius = ClampInt(ToHundredths(values.glowRadius), kGlowRadiusMin, kGlowRadiusMax);
     state.glowIntensity =
@@ -1690,10 +1871,12 @@ void SyncControls(HWND dialog, State& state) {
     SetSliderPosition(dialog, kIdCompassSlider, state.compassSize);
     SetControlText(dialog, kIdCompassValue, FormatHundredths(state.compassSize));
 
-    SetKeyBoxKey(dialog, values.toggleKey);
+    SetKeyBoxKey(dialog, kIdToggleKey, values.toggleKey);
+    SetKeyBoxKey(dialog, kIdNextProfileKey, values.nextProfileKey);
 
     // The three testing settings.
     state.crosshairHidden = values.crosshairEnabled == 0;
+    state.numericPingOn = values.numericPing != 0;
     state.serverOn = values.serverEnabled != 0;
     state.timescale = ClampInt(ToHundredths(values.timescale), kTimescaleMin, kTimescaleMax);
     SetSliderRange(dialog, kIdTimescaleSlider, kTimescaleMin, kTimescaleMax);
@@ -1704,6 +1887,17 @@ void SyncControls(HWND dialog, State& state) {
     SetSliderRange(dialog, kIdGravitySlider, kGravityMin, kGravityMax);
     SetSliderPosition(dialog, kIdGravitySlider, state.gravity);
     SetControlText(dialog, kIdGravityValue, FormatInt(state.gravity));
+
+    state.znear = ClampInt(ToHundredths(values.znear), kZnearMin, kZnearMax);
+    SetControlText(dialog, kIdZnearValue, FormatHundredths(state.znear));
+
+    // The sprint scale: the engine's own 1.5 by default, and the slider covers the
+    // registration's whole 0 to 2.
+    state.sprintScale =
+        ClampInt(ToHundredths(values.sprintSpeedScale), kSprintSpeedMin, kSprintSpeedMax);
+    SetSliderRange(dialog, kIdSprintSpeedSlider, kSprintSpeedMin, kSprintSpeedMax);
+    SetSliderPosition(dialog, kIdSprintSpeedSlider, state.sprintScale);
+    SetControlText(dialog, kIdSprintSpeedValue, FormatHundredths(state.sprintScale));
 
     UpdateEnabledState(dialog, state);
 }
@@ -1734,8 +1928,12 @@ void LoadValuesFrom(State& state, const std::wstring& path) {
     state.values.netFpsEnabled =
         app::IniInt(path, L"netfps", L"enabled", state.values.netFpsEnabled) != 0;
 
-    // 0x75 is F6. Read as hex, which is how the config writes it.
+    // 0x75 is F6, 0x77 is F8. Read as hex, which is how the config writes them.
+    // Both live in the working config's [general], not in a profile: a profile
+    // loaded over them must not take the keys away, which is what LoadProfileSlot
+    // puts back.
     state.values.toggleKey = app::IniInt(path, L"general", L"toggleKey", 0x75);
+    state.values.nextProfileKey = app::IniInt(path, L"general", L"nextProfileKey", 0x77);
 
     state.values.sensitivityEnabled =
         app::IniInt(path, L"sensitivity", L"enabled", state.values.sensitivityEnabled) != 0;
@@ -1813,6 +2011,12 @@ void LoadValuesFrom(State& state, const std::wstring& path) {
     const bool crosshairHidden = app::IniInt(path, L"cg_drawCrosshair", L"enabled", 0) != 0;
     state.values.crosshairEnabled = crosshairHidden ? 0 : 1;
 
+    // The numeric ping, read the same way: the switch lives in one of its two
+    // sections - the text's - and the values are the pair the engine has by
+    // default, so the window only has to carry the flag between them.
+    state.values.numericPing =
+        app::IniInt(path, L"cg_scoreboardPingText", L"enabled", 0) != 0;
+
     // The other two are gateless values written whenever the window saves, like
     // r_blur, and both start at the engine's neutral numbers.
     // The switch that gates the two of them lives on the timescale's section, and
@@ -1822,6 +2026,23 @@ void LoadValuesFrom(State& state, const std::wstring& path) {
     state.values.timescale = app::IniFloat(path, L"timescale", L"value", state.values.timescale);
     state.values.physGravity =
         app::IniFloat(path, L"phys_gravity", L"value", state.values.physGravity);
+
+    // The third-person switch and the near plane. The switch has a section of its
+    // own; r_znear is a gateless value, so only its value is read.
+    state.values.cameraThirdPerson =
+        app::IniInt(path, L"camera_thirdPerson", L"enabled", state.values.cameraThirdPerson) != 0;
+    state.values.znear = app::IniFloat(path, L"r_znear", L"value", state.values.znear);
+
+    // The sprint scale, a gateless value like r_znear, so only its value is read.
+    // bg_forceDualWield is deliberately not read: its switch was tried in a match
+    // and did nothing, so its section is file-only now, like the other discarded
+    // settings.
+    state.values.sprintSpeedScale = app::IniFloat(path, L"player_sprintSpeedScale", L"value",
+                                                  state.values.sprintSpeedScale);
+
+    // The mp_paused switch beside the sprint scale on the Debug card, an int
+    // registered at 0.
+    state.values.mpPaused = app::IniInt(path, L"mp_paused", L"enabled", state.values.mpPaused) != 0;
 
     // Every switch that has a control in the window. These were missing, which
     // meant a section switched on in the file showed as unticked here - and the
@@ -1866,6 +2087,7 @@ void ReadControls(HWND dialog, State& state) {
 
     values.musicEnabled = state.musicOn ? 1 : 0;
     values.fullbrightEnabled = state.fullbrightOn ? 1 : 0;
+    values.filmInvert = state.filmInvertOn ? 1 : 0;
     values.hudEnabled = state.hudOn ? 1 : 0;
     values.gunEnabled = state.gunOn ? 1 : 0;
     values.fogEnabled = state.fogOn ? 1 : 0;
@@ -1887,15 +2109,11 @@ void ReadControls(HWND dialog, State& state) {
     values.filmDesaturation =
         static_cast<float>(SliderPosition(dialog, kIdFilmDesaturationSlider)) / 100.0f;
 
-    // The three tints are colour dvars in the game - four floats each - but the
-    // engine writes the same bytes to every offset the section lists, so one
-    // number here becomes a neutral grey tint. See src/features.cpp.
-    values.filmLightTint =
-        static_cast<float>(SliderPosition(dialog, kIdFilmLightTintSlider)) / 100.0f;
-    values.filmMediumTint =
-        static_cast<float>(SliderPosition(dialog, kIdFilmMediumTintSlider)) / 100.0f;
-    values.filmDarkTint =
-        static_cast<float>(SliderPosition(dialog, kIdFilmDarkTintSlider)) / 100.0f;
+    // The three tints are colour dvars - four floats each - and the engine writes
+    // the same bytes to every offset a section lists, so one number is a neutral
+    // grey tint. The window has no controls for them any more, so their values are
+    // left exactly as LoadValuesFrom read them and WriteValuesTo writes those back.
+    // See src/features.cpp.
 
     // The glow column: one switch for the four gates, then its four values.
     values.glowEnabled = state.glowOn ? 1 : 0;
@@ -1928,11 +2146,25 @@ void ReadControls(HWND dialog, State& state) {
     // other two come straight off their sliders, timescale in hundredths and
     // gravity in whole units.
     values.crosshairEnabled = state.crosshairHidden ? 0 : 1;
+    values.numericPing = state.numericPingOn ? 1 : 0;
     values.serverEnabled = state.serverOn ? 1 : 0;
     values.timescale = static_cast<float>(SliderPosition(dialog, kIdTimescaleSlider)) / 100.0f;
     values.physGravity = static_cast<float>(SliderPosition(dialog, kIdGravitySlider));
 
-    values.toggleKey = KeyBoxKey(dialog);
+    // The near plane comes out of the state rather than off a control: it has no
+    // slider, and a box is only read back while it has the focus - see the
+    // EN_KILLFOCUS handler, which is what folds a typed number into the state.
+    values.znear = static_cast<float>(state.znear) / 100.0f;
+
+    values.sprintSpeedScale =
+        static_cast<float>(SliderPosition(dialog, kIdSprintSpeedSlider)) / 100.0f;
+
+    values.mpPaused = state.mpPausedOn ? 1 : 0;
+
+    values.cameraThirdPerson = state.cameraThirdPersonOn ? 1 : 0;
+
+    values.toggleKey = KeyBoxKey(dialog, kIdToggleKey);
+    values.nextProfileKey = KeyBoxKey(dialog, kIdNextProfileKey);
 
     // sensitivityEnabled and sensitivityValue are deliberately left exactly as
     // they were read from the file. This window has no controls for them, so
@@ -1940,7 +2172,12 @@ void ReadControls(HWND dialog, State& state) {
     // section keeps whatever value it already had.
 }
 
-bool WriteValuesTo(const std::wstring& path, const ipc::Values& values) {
+// `includeHotkeys` is false when the target is a profile: the two hotkeys belong
+// to the working config's [general] section, so a slot that is carried to another
+// machine cannot carry a key with it - and a profile edited by hand cannot have
+// its key silently ignored, because there is no key in it to ignore.
+bool WriteValuesTo(const std::wstring& path, const ipc::Values& values,
+                   bool includeHotkeys = true) {
     bool ok = true;
 
     auto set = [&path, &ok](const wchar_t* section, const wchar_t* key, const std::wstring& value) {
@@ -1959,6 +2196,9 @@ bool WriteValuesTo(const std::wstring& path, const ipc::Values& values) {
     set(L"cg_draw2D", L"enabled", values.hudEnabled ? L"1" : L"0");
     set(L"cg_drawGun", L"enabled", values.gunEnabled ? L"1" : L"0");
     set(L"r_fog", L"enabled", values.fogEnabled ? L"1" : L"0");
+    // The film grade's invert flag: a fixed 1 when the switch is ticked, and 0 -
+    // the engine's own value - when it is not.
+    set(L"r_filmTweakInvert", L"enabled", values.filmInvert ? L"1" : L"0");
     set(L"r_filmTweakEnable", L"enabled", values.filmTweakEnabled ? L"1" : L"0");
 
     // The viewmodel offsets: three sections, one shared enabled flag.
@@ -2048,8 +2288,33 @@ bool WriteValuesTo(const std::wstring& path, const ipc::Values& values) {
     set(L"timescale", L"value", FormatFloat(values.timescale));
     set(L"phys_gravity", L"enabled", serverEnabled);
     set(L"phys_gravity", L"value", FormatFloat(values.physGravity));
+    // The third-person switch, and the near plane in the Debug card. The value has
+    // no gate of its own, like r_blur, so its section is always on and only the
+    // number moves.
+    set(L"camera_thirdPerson", L"enabled", values.cameraThirdPerson ? L"1" : L"0");
+    set(L"r_znear", L"enabled", L"1");
+    set(L"r_znear", L"value", FormatFloat(values.znear));
+    // The sprint scale - gateless like r_blur, so its section is always on and
+    // only the number moves.
+    set(L"player_sprintSpeedScale", L"enabled", L"1");
+    set(L"player_sprintSpeedScale", L"value", FormatFloat(values.sprintSpeedScale));
+    // The mp_paused switch beside it. It has no gate either, so its section is
+    // always on and the switch is the flag.
+    set(L"mp_paused", L"enabled", values.mpPaused ? L"1" : L"0");
+    // The numeric ping is the same shape of thing - one switch, two cvars - but
+    // the senses are opposite, so the values differ as well as the flag: the
+    // number is only drawn where the graph is off. Both sections get the switch,
+    // and the values are written either way so the pair stays coherent.
+    const wchar_t* const pingEnabled = values.numericPing ? L"1" : L"0";
+    set(L"cg_scoreboardPingText", L"enabled", pingEnabled);
+    set(L"cg_scoreboardPingText", L"value", L"1");
+    set(L"cg_scoreboardPingGraph", L"enabled", pingEnabled);
+    set(L"cg_scoreboardPingGraph", L"value", L"0");
 
-    set(L"general", L"toggleKey", FormatHex(values.toggleKey));
+    if (includeHotkeys) {
+        set(L"general", L"toggleKey", FormatHex(values.toggleKey));
+        set(L"general", L"nextProfileKey", FormatHex(values.nextProfileKey));
+    }
 
     set(L"sensitivity", L"enabled", values.sensitivityEnabled ? L"1" : L"0");
     set(L"sensitivity", L"value", FormatFloat(values.sensitivityValue));
@@ -2240,6 +2505,13 @@ void LoadProfileSlot(HWND dialog, State& state, int slot) {
     }
 
     LoadValuesFrom(state, path);
+
+    // The two hotkeys are global: they come from the working config, not from the
+    // profile, so switching profile cannot move the toggle key or the next-profile
+    // key. A profile file does not carry them at all - see WriteValuesTo.
+    state.values.toggleKey = app::IniInt(state.iniPath, L"general", L"toggleKey", 0x75);
+    state.values.nextProfileKey =
+        app::IniInt(state.iniPath, L"general", L"nextProfileKey", 0x77);
     SyncControls(dialog, state);
 
     // The switches it brought with it decide which rows show, so the window has to
@@ -2264,7 +2536,9 @@ bool SaveProfileSlot(const State& state) {
         }
     }
 
-    return WriteValuesTo(path, state.values) &&
+    // The hotkeys are left out: they belong to the working config, so a profile
+    // carries settings and nothing else.
+    return WriteValuesTo(path, state.values, false) &&
            app::SetIniValue(path, L"general", L"closeWithGame",
                             state.closeWithGame ? L"1" : L"0");
 }
@@ -2444,8 +2718,36 @@ void OnApply(HWND dialog, State& state) {
     ::InvalidateRect(dialog, nullptr, TRUE);
 }
 
+// What pressing the next-profile key does - and what the button that used to sit
+// at the foot of the window did: move to the next slot, load it and then apply it,
+// which is what puts the new values into a running match. The dropdown is moved
+// with it, because the dropdown is what shows which slot is in use, and
+// CB_SETCURSEL does not send a CBN_SELCHANGE, so the slot is not loaded twice.
+void DoNextProfile(HWND dialog, State& state) {
+    const int next = (state.profile % kProfileCount) + 1;
+    ::SendMessageW(::GetDlgItem(dialog, kIdProfileCombo), CB_SETCURSEL, next - 1, 0);
+    state.profile = next;
+    LoadProfileSlot(dialog, state, next);
+    OnApply(dialog, state);
+}
+
+// The message the DLL posts when its next-profile key is pressed. Both sides
+// register the same name, which is the one thing they have to agree on, because
+// it is what makes the number the same in two processes.
+const UINT kNextProfileMessage = ::RegisterWindowMessageW(L"MW2UnlockerNextProfile");
+
 INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lparam) {
     auto* state = reinterpret_cast<State*>(::GetWindowLongPtrW(dialog, DWLP_USER));
+
+    // The in-game key, forwarded by the DLL: the DLL cannot switch profiles - it
+    // does not own them - so it asks, and the answer is this window's Apply, which
+    // is also what tells the DLL what the new values are.
+    if (message == kNextProfileMessage) {
+        if (state != nullptr) {
+            DoNextProfile(dialog, *state);
+        }
+        return TRUE;
+    }
 
     switch (message) {
     case WM_INITDIALOG: {
@@ -2469,9 +2771,6 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmContrastValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmBrightnessValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmDesaturationValue), L"DarkMode_CFD", nullptr);
-        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmLightTintValue), L"DarkMode_CFD", nullptr);
-        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmMediumTintValue), L"DarkMode_CFD", nullptr);
-        ::SetWindowTheme(::GetDlgItem(dialog, kIdFilmDarkTintValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdGlowRadiusValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdGlowIntensityValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdGlowCutoffValue), L"DarkMode_CFD", nullptr);
@@ -2485,6 +2784,12 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         ::SetWindowTheme(::GetDlgItem(dialog, kIdCompassValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdTimescaleValue), L"DarkMode_CFD", nullptr);
         ::SetWindowTheme(::GetDlgItem(dialog, kIdGravityValue), L"DarkMode_CFD", nullptr);
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdZnearValue), L"DarkMode_CFD", nullptr);
+        // The sprint box, which is the second one to be left out of this list.
+        // Everything added to the window needs a line here as well as in the
+        // template: the theme is per control, and an edit left on the default one
+        // paints itself light.
+        ::SetWindowTheme(::GetDlgItem(dialog, kIdSprintSpeedValue), L"DarkMode_CFD", nullptr);
 
         // The profile dropdown is a real combo box, the one stock control in the
         // window. Its frame and its edit field take the dark theme; its dropdown
@@ -2644,15 +2949,22 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         const bool header = (id == kIdFpsHeader || id == kIdFovHeader ||
                              id == kIdViewModelHeader || id == kIdFilmHeader ||
                              id == kIdOtherHeader || id == kIdServerHeader);
-        // The two statics that sit on the window background - the note at the top
-        // and the build number - take the background brush, so they paint no
-        // rectangle of their own. With the card brush they drew a grey band whose
-        // left edge did not line up with anything. The status line is the third,
-        // but it sits inside the box the window paints for it, so it takes the
-        // card brush and blends into that instead.
-        const bool onBackground = (id == kIdNote || id == kIdBuild);
+        // The build number sits on the window background, so it paints no
+        // rectangle of its own. With the card brush it drew a grey band whose left
+        // edge did not line up with anything. The status line is the second of the
+        // three, but it sits inside the box the window paints for it, so it takes
+        // the card brush and blends into that instead. The note above the first
+        // card is the third and no longer arrives here at all: it is SS_OWNERDRAW
+        // now, because it draws a word of its own in the rejoin colour - see
+        // DrawNote.
+        const bool onBackground = (id == kIdBuild);
+        // The safe area's two "adjusted" labels are settings the game re-reads
+        // only when a match is set up, so they take the rejoin colour the note
+        // names - the same as the music and fullbright switches, which are drawn
+        // rather than declared as statics and so get it from DrawCheckbox.
+        const bool rejoin = (id == kIdSafeAreaAdjHLabel || id == kIdSafeAreaAdjVLabel);
         ::SetBkMode(dc, TRANSPARENT);
-        ::SetTextColor(dc, header ? kAccent : kTextDim);
+        ::SetTextColor(dc, rejoin ? kRejoin : (header ? kAccent : kTextDim));
         return reinterpret_cast<INT_PTR>(onBackground ? g_backgroundBrush : g_cardBrush);
     }
 
@@ -2677,6 +2989,14 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         const auto* item = reinterpret_cast<const DRAWITEMSTRUCT*>(lparam);
         const bool focused = (item->itemState & ODS_FOCUS) != 0;
         const bool disabled = (item->itemState & ODS_DISABLED) != 0;
+
+        // The note above the first card, which is the window's one owner-drawn
+        // static. A static has no other way to draw part of its text in another
+        // colour, which is the whole reason this one is declared SS_OWNERDRAW.
+        if (item->CtlType == ODT_STATIC && item->CtlID == kIdNote) {
+            DrawNote(item->hDC, item->rcItem, item->hwndItem);
+            return TRUE;
+        }
 
         // The profile box. A combo box sends this for each row of its list, and
         // once more for the field, which arrives as itemID -1. That field belongs
@@ -2716,23 +3036,26 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
                          IsChecked(*state, kIdFovEnable), focused, disabled);
             return TRUE;
         case kIdMusicEnable:
-            DrawCheckbox(item->hDC, item->rcItem, L"Mute the music",
-                         IsChecked(*state, kIdMusicEnable), focused, disabled);
+            // One of the two switches whose label takes the rejoin colour: the
+            // game reads snd_enableStream when a match is set up, so the label -
+            // not the switch's state - is what says so.
+            DrawCheckbox(item->hDC, item->rcItem, L"Disable Music",
+                         IsChecked(*state, kIdMusicEnable), focused, disabled, kRejoin);
             return TRUE;
         case kIdFullbrightEnable:
-            DrawCheckbox(item->hDC, item->rcItem, L"Fullbright world",
-                         IsChecked(*state, kIdFullbrightEnable), focused, disabled);
+            DrawCheckbox(item->hDC, item->rcItem, L"Fullbright",
+                         IsChecked(*state, kIdFullbrightEnable), focused, disabled, kRejoin);
             return TRUE;
         case kIdHudEnable:
-            DrawCheckbox(item->hDC, item->rcItem, L"Hide the HUD",
+            DrawCheckbox(item->hDC, item->rcItem, L"Hide HUD",
                          IsChecked(*state, kIdHudEnable), focused, disabled);
             return TRUE;
         case kIdGunEnable:
-            DrawCheckbox(item->hDC, item->rcItem, L"Hide the weapon model",
+            DrawCheckbox(item->hDC, item->rcItem, L"Hide Weapon model",
                          IsChecked(*state, kIdGunEnable), focused, disabled);
             return TRUE;
         case kIdFogEnable:
-            DrawCheckbox(item->hDC, item->rcItem, L"Disable the fog",
+            DrawCheckbox(item->hDC, item->rcItem, L"Disable Fog",
                          IsChecked(*state, kIdFogEnable), focused, disabled);
             return TRUE;
         case kIdFilmTweakEnable:
@@ -2764,18 +3087,48 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
         case kIdCrosshairEnable:
             // A plain switch, not one that opens rows: cg_drawCrosshair is a
             // single cvar, so there is nothing underneath it to reveal.
-            DrawCheckbox(item->hDC, item->rcItem, L"Hide the crosshair",
+            DrawCheckbox(item->hDC, item->rcItem, L"Hide Crosshair",
                          IsChecked(*state, kIdCrosshairEnable), focused, disabled);
+            return TRUE;
+        case kIdNumericPing:
+            // Plain as well. It writes two cvars rather than one, but the window
+            // has nothing to open for it - it sits alone in the card's third
+            // column instead.
+            DrawCheckbox(item->hDC, item->rcItem, L"Numeric Ping",
+                         IsChecked(*state, kIdNumericPing), focused, disabled);
+            return TRUE;
+        case kIdCameraEnable:
+            // Two of the switches in "Other Settings" are single cvars whose value
+            // *is* the setting, so they read like the rest of that card: tick one
+            // and a fixed number is written, untick it and the engine's own value
+            // comes back.
+            DrawCheckbox(item->hDC, item->rcItem, L"Third person view",
+                         IsChecked(*state, kIdCameraEnable), focused, disabled);
+            return TRUE;
+        case kIdFilmInvert:
+            // "Tweak dev var; enable inverted video" in the binary's words - the
+            // label says what it does to the picture, since it only shows while
+            // the grade itself is on.
+            DrawCheckbox(item->hDC, item->rcItem, L"Invert the grade",
+                         IsChecked(*state, kIdFilmInvert), focused, disabled);
+            return TRUE;
+        case kIdMpPaused:
+            // "If true ignore server time advancing.  Handy for taking
+            // hi-resolution screenshots without the world moving" - the binary's
+            // own words, which is why the label is just the dvar's name.
+            DrawCheckbox(item->hDC, item->rcItem, L"MP paused",
+                         IsChecked(*state, kIdMpPaused), focused, disabled);
             return TRUE;
         case kIdServerEnable:
             // A header with a triangle, like the two folding cards above it: the
-            // two settings are what it opens, and the same switch gates them.
-            DrawExpandableCheckbox(item->hDC, item->rcItem, L"Tweak the server",
+            // three rows are what it opens, and the switch gates the two testing
+            // settings among them.
+            DrawExpandableCheckbox(item->hDC, item->rcItem, L"Tweak the debug settings",
                                    IsChecked(*state, kIdServerEnable), state->serverOn, focused,
                                    disabled);
             return TRUE;
         case kIdCloseWithGame:
-            DrawCheckbox(item->hDC, item->rcItem, L"Close with the game",
+            DrawCheckbox(item->hDC, item->rcItem, L"Close with Game",
                          IsChecked(*state, kIdCloseWithGame), focused, disabled);
             return TRUE;
         case kIdCheckUpdates:
@@ -2813,9 +3166,6 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
                         : id == kIdFilmContrastSlider ? kIdFilmContrastValue
                         : id == kIdFilmBrightnessSlider   ? kIdFilmBrightnessValue
                         : id == kIdFilmDesaturationSlider ? kIdFilmDesaturationValue
-                        : id == kIdFilmLightTintSlider ? kIdFilmLightTintValue
-                        : id == kIdFilmMediumTintSlider ? kIdFilmMediumTintValue
-                        : id == kIdFilmDarkTintSlider ? kIdFilmDarkTintValue
                         : id == kIdGlowRadiusSlider    ? kIdGlowRadiusValue
                         : id == kIdGlowIntensitySlider ? kIdGlowIntensityValue
                         : id == kIdGlowCutoffSlider    ? kIdGlowCutoffValue
@@ -2826,27 +3176,32 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
                         : id == kIdCompassSlider       ? kIdCompassValue
                         : id == kIdTimescaleSlider     ? kIdTimescaleValue
                         : id == kIdGravitySlider       ? kIdGravityValue
+                        : id == kIdSprintSpeedSlider   ? kIdSprintSpeedValue
                         : (id == kIdFpsSlider ? kIdFpsValue : kIdFovValue);
         const bool decimal = id == kIdGunXSlider || id == kIdGunYSlider || id == kIdGunZSlider ||
                              id == kIdFilmContrastSlider || id == kIdFilmBrightnessSlider ||
-                             id == kIdFilmDesaturationSlider || id == kIdFilmLightTintSlider ||
-                             id == kIdFilmMediumTintSlider || id == kIdFilmDarkTintSlider ||
+                             id == kIdFilmDesaturationSlider ||
                              id == kIdGlowRadiusSlider || id == kIdGlowIntensitySlider ||
                              id == kIdGlowCutoffSlider || id == kIdGlowDesatSlider ||
                              id == kIdBlurSlider || id == kIdSafeAreaAdjHSlider ||
                              id == kIdSafeAreaAdjVSlider || id == kIdCompassSlider ||
-                             id == kIdTimescaleSlider;
+                             id == kIdTimescaleSlider || id == kIdSprintSpeedSlider;
         SetControlText(dialog, box, decimal ? FormatHundredths(position) : FormatInt(position));
         return TRUE;
     }
 
     case kMsgKeyChanged: {
-        // The hotkey box stepped to a new key. It only takes effect on Apply,
-        // like everything else in this window.
+        // A hotkey box stepped to a new key. It only takes effect on Apply, like
+        // everything else in this window - and the key it belongs to is the box
+        // that sent this, which is why the id matters here now that there are two.
         if (state == nullptr) {
             return TRUE;
         }
-        state->values.toggleKey = static_cast<int>(lparam);
+        if (static_cast<int>(wparam) == kIdNextProfileKey) {
+            state->values.nextProfileKey = static_cast<int>(lparam);
+        } else {
+            state->values.toggleKey = static_cast<int>(lparam);
+        }
         return TRUE;
     }
 
@@ -2861,7 +3216,9 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
             id == kIdMusicEnable || id == kIdFullbrightEnable || id == kIdHudEnable ||
             id == kIdGunEnable || id == kIdFogEnable || id == kIdFilmTweakEnable ||
             id == kIdGlowEnable || id == kIdMoveGunEnable || id == kIdSafeAreaEnable ||
-            id == kIdCrosshairEnable || id == kIdServerEnable || id == kIdCloseWithGame) {
+            id == kIdCrosshairEnable || id == kIdServerEnable || id == kIdCloseWithGame ||
+            id == kIdNumericPing || id == kIdCameraEnable || id == kIdFilmInvert ||
+            id == kIdMpPaused) {
             if (notification == BN_CLICKED) {
                 bool* field = CheckState(*state, id);
                 if (field != nullptr) {
@@ -2879,15 +3236,33 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
             return TRUE;
         }
 
+        // The near-plane box in the Debug card. It has no slider, so this is the
+        // whole path a number typed into it takes: fold it into hundredths, clamp it
+        // to the value's own range - there is no slider that could disagree with the
+        // box - and write the clamped number back into the state, which is where
+        // ReadControls finds it.
+        if (id == kIdZnearValue) {
+            if (notification == EN_KILLFOCUS) {
+                const std::wstring typed = ControlText(dialog, id);
+                // ToHundredths takes a float, and the box is only ever a few
+                // hundred either way, so nothing is lost by the narrowing.
+                const int clamped = ClampInt(
+                    ToHundredths(static_cast<float>(::wcstod(typed.c_str(), nullptr))),
+                    kZnearMin, kZnearMax);
+                state->znear = clamped;
+                SetControlText(dialog, id, FormatHundredths(clamped));
+            }
+            return TRUE;
+        }
+
         if (id == kIdFpsValue || id == kIdFovValue || id == kIdGunXValue ||
             id == kIdGunYValue || id == kIdGunZValue || id == kIdFilmContrastValue ||
             id == kIdFilmBrightnessValue || id == kIdFilmDesaturationValue ||
-            id == kIdFilmLightTintValue || id == kIdFilmMediumTintValue ||
-            id == kIdFilmDarkTintValue || id == kIdGlowRadiusValue ||
+            id == kIdGlowRadiusValue ||
             id == kIdGlowIntensityValue || id == kIdGlowCutoffValue ||
             id == kIdGlowDesatValue || id == kIdBlurValue || id == kIdSafeAreaAdjHValue ||
             id == kIdSafeAreaAdjVValue || id == kIdCompassValue || id == kIdTimescaleValue ||
-            id == kIdGravityValue) {
+            id == kIdGravityValue || id == kIdSprintSpeedValue) {
             if (notification == EN_KILLFOCUS) {
                 const std::wstring typed = ControlText(dialog, id);
                 // Gravity is the odd one out among the values: the engine keeps it
@@ -2920,21 +3295,8 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
                         low = kDesaturationMin;
                         high = kDesaturationMax;
                         break;
-                    case kIdFilmLightTintValue:
-                        slider = kIdFilmLightTintSlider;
-                        low = kTintMin;
-                        high = kTintMax;
-                        break;
-                    case kIdFilmMediumTintValue:
-                        slider = kIdFilmMediumTintSlider;
-                        low = kTintMin;
-                        high = kTintMax;
-                        break;
-                    case kIdFilmDarkTintValue:
-                        slider = kIdFilmDarkTintSlider;
-                        low = kTintMin;
-                        high = kTintMax;
-                        break;
+                    // The three tint values had cases here; they have no boxes to
+                    // type into now.
                     case kIdGlowRadiusValue:
                         slider = kIdGlowRadiusSlider;
                         low = kGlowRadiusMin;
@@ -2979,6 +3341,11 @@ INT_PTR CALLBACK DialogProc(HWND dialog, UINT message, WPARAM wparam, LPARAM lpa
                         slider = kIdTimescaleSlider;
                         low = kTimescaleMin;
                         high = kTimescaleMax;
+                        break;
+                    case kIdSprintSpeedValue:
+                        slider = kIdSprintSpeedSlider;
+                        low = kSprintSpeedMin;
+                        high = kSprintSpeedMax;
                         break;
                     default:
                         break;

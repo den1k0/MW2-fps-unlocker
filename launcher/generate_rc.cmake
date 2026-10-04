@@ -8,7 +8,7 @@
 #   101 = the unlocker DLL        (launcher/main.cpp, kResourceDll)
 #   102 = the default config      (launcher/main.cpp, kResourceIni)
 #   103 = the control dialog      (launcher/gui.cpp,   kDialogMain)
-#  1001..1094 = its controls      (launcher/gui.cpp,   kId*)
+#  1001..1109 = its controls      (launcher/gui.cpp,   kId*)
 #
 # The layout is here rather than built with CreateWindowEx calls because a dialog
 # template gives the right font, tab order and focus handling for free. The
@@ -26,10 +26,15 @@
 #
 # Above the first card is the one line of advice: some of these settings are only
 # read by the game when a match is set up, so they do nothing until the next one
-# starts. That is why every row below sits one line lower than it otherwise
-# would. It is control 1083 and the launcher gives it a smaller font than the rest
-# of the window, so it reads as a note rather than as one more setting - and being
-# set smaller, it needs less room above it than a full-size line would.
+# starts. It names the colour those rows are labelled in, so a user can see at a
+# glance which settings are waiting for a rejoin - and it is the window's one
+# owner-drawn static: it is declared SS_OWNERDRAW because the word naming that
+# colour is itself drawn in the colour, which a static control cannot do on its
+# own, so the launcher paints it in WM_DRAWITEM. It is control 1083 and the
+# launcher gives it a smaller font than the rest of the window, so it reads as a
+# note rather than as one more setting; being set smaller, it needs less room above
+# it than a full-size line would. That is why every row below sits one line lower
+# than it otherwise would.
 #
 # The viewmodel card's sliders are 74 units wide rather than the 104 the card has
 # to spare, so that they stop short of the number boxes at 114. A slider that runs
@@ -41,14 +46,17 @@
 # their sections are still in the config and still applied, they simply have no
 # sliders. The status line and the build number (1082) are file-adjacent notes of
 # the same kind - text on the window background rather than inside a card, which
-# is why the launcher gives those three controls the background brush.
+# is why the launcher gives those two controls the background brush. The note above
+# the first card is the third of that kind, and paints its own background now that
+# it paints its own text.
 #
 # The switches in "Other Settings" are not sliders: each is a cvar set to a fixed
 # value (music off, fullbright on, HUD off, weapon model off, fog off), so there
-# is nothing in them to drag. They are laid out in two columns because a single
-# column of them would make the window needlessly tall. The cards that do carry
-# sliders - the viewmodel and the film tweak - use one row per value, with its
-# number beside it so an exact figure can be typed.
+# is nothing in them to drag. They are laid out in three columns because a single
+# column of them would make the window needlessly tall, and the shortened names
+# leave room for the third - which holds the numeric ping switch alone. The cards
+# that do carry sliders - the viewmodel and the film tweak - use one row per value,
+# with its number beside it so an exact figure can be typed.
 #
 # Both of those cards hold two settings side by side, each column with its own
 # switch, because a single column of every value would make the window taller
@@ -65,12 +73,13 @@
 # renderer is set up rather than every frame, so a slider for it promised
 # something it could not deliver. Its section is still in the config.
 #
-# The dialog is 527 units tall while its last row ends at 521. Those 6 spare units
-# are the margin under the buttons: with the 8 the template first carried, the
-# button row's bottom edge landed a few pixels outside the client area, because the
-# frame is a little taller than the difference between the window and the client
-# rectangles at the moment ApplyLayout measures it. Six units is about twelve
-# pixels on screen, which is what the harness's fit check is looking for.
+# The dialog is 584 units tall while its last row, the update button's, ends at
+# 578. Those 6 spare units are the margin under it: with the 8 the template first
+# carried, the button row's bottom edge landed a few pixels outside the client
+# area, because the frame is a little taller than the difference between the window
+# and the client rectangles at the moment ApplyLayout measures it. Six units is
+# about eleven pixels on screen, which is what the harness's fit check is looking
+# for.
 #
 # The top strip carries the note at its left and the profile box at its right: a
 # dropdown of the three profile slots. Choosing one loads it, and Apply & save is
@@ -93,21 +102,58 @@
 # they do not run into the number boxes beside them.
 #
 # "Server" is the third card that folds: its switch is directly under the title and
-# the two testing rows hang below it, so the card is one switch high until it is
-# turned on. Unlike the other two, that switch is also a real gate - the timescale
-# and the gravity are written only while it is on - because there is nothing else
-# about either of them to decide whether to write.
+# its two rows hang below it, so the card is one switch high until it is turned on.
+# Unlike the other two, that switch is also a real gate - the timescale and the
+# gravity are written only while it is on - because there is nothing about either of
+# them to decide whether to write.
 #
-# "Other Settings" carries the crosshair switch at the foot of its right-hand
-# column, which is what keeps the two columns even - three switches each - and lets
-# the card end one row higher than it would with a fourth on the left. "Close with
+# "Other Settings" carries the crosshair and numeric ping switches in the middle and
+# third columns of the switch rows, and the third-person switch joins them there -
+# the third column holding two against the other two columns of three. "Close with
 # the game" sits at the right-hand end of the hotkey's own row rather than at the
-# foot of that column.
+# foot of a column.
 #
-# The two testing settings have a card of their own, "Server", below it - a label,
-# a slider and a number box each. Timescale's slider counts hundredths, gravity's
-# counts whole units - an engine unit of gravity is a large number, so hundredths
-# of one would be a range nothing could use.
+# It carried more than that for a build: the subwindow's four number boxes, under a
+# heading that named them in order, and a row of two for the shader-debug mode and
+# the near plane. A match showed what the first two were worth - the boxes only
+# scale the frame, and the shader-debug view only shows how the shaders are drawn -
+# so both went, and the near plane went with them because it wanted a card of its
+# own rather than a fifth row here.
+#
+# At the foot is "Debug", which is the card that used to be called "Server" and is
+# one row taller than it was: the two testing settings below the switch, and then
+# the near plane, which used to be a card of its own in the space under this one.
+# The two settings are a label, a slider and a number box each, the second labelled
+# "Prop Gravity" because it is the gravity on objects rather than on the player.
+# Timescale's slider counts hundredths, gravity's counts whole units - an engine
+# unit of gravity is a large number, so hundredths of one would be a range nothing
+# could use. The timescale slider starts at 0.50 rather than at the engine's own
+# 0.001: below about that the game's time sync fights the slowdown and rubberbands,
+# so the window does not offer what the engine cannot deliver. The config's own
+# section still takes any value.
+#
+# The near plane is a label and a number box, and it rides the card's switch with
+# the other two rows. Its value is written either way - r_znear has no gate, like
+# blur - so folding the card hides the box without holding the value back. (It had
+# a hint beside the box for a build; the label says which value it is, so the hint
+# only made the row busier. Anything left in a card that folds needs an id of its
+# own, which is what that hint taught: an unlabelled static never moves.)
+#
+# "Other Settings" carries the two hotkey boxes side by side on its first row - the
+# toggle key's on the left, the next-profile key's on the right - and below them a
+# three-by-three switch grid: music, fullbright and the HUD on the left; the fog, the
+# weapon model and the crosshair in the middle; and the numeric ping, the third-person
+# camera and the close-with-the-game switch on the right. The last of those is a
+# launcher setting rather than a cvar, which is why it lives here with the switches
+# rather than in a card of its own.
+# The keys are global - the working config's [general] section, not a profile - which
+# is why their rows are in the card that never folds.
+#
+# The next-profile key is polled by the DLL, in the game's process, because that is
+# where a keypress is certainly visible; the DLL cannot switch profiles itself, so
+# it posts a registered message to this window and the window does what the foot of
+# the window used to do in one press: next slot, load it, apply it, which is what
+# puts the new values into a running match.
 #
 # On the button row at the foot, under the build number, is "Check for update":
 # its own row rather than beside the buttons, because what it does is not part of
@@ -159,12 +205,12 @@ file(WRITE "${OUT}"
 101 RCDATA \"${dll_native}\"
 102 RCDATA \"${ini_native}\"
 
-103 DIALOGEX 0, 0, 300, 539
+103 DIALOGEX 0, 0, 300, 519
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION \"MW2 Unlocker\"
 FONT 9, \"MS Shell Dlg\", 400, 0, 0x1
 BEGIN
-    LTEXT           \"Some settings take effect only after you rejoin a match.\", 1083, 20, 3, 175, 10
+    CONTROL         \"Settings coloured in yellow will be applied after match rejoin.\", 1083, \"Static\", SS_OWNERDRAW, 20, 3, 176, 10
     COMBOBOX        1092, 200, 1, 90, 54, CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS | WS_VSCROLL | WS_TABSTOP
 
     LTEXT           \"Frame rate cap\", 1013, 20, 24, 66, 11
@@ -213,15 +259,6 @@ BEGIN
     LTEXT           \"Desat\", 1051, 20, 239, 36, 10
     CONTROL         \"\", 1038, \"MW2Slider\", WS_TABSTOP, 58, 237, 52, 14
     EDITTEXT        1039, 114, 237, 34, 14, ES_AUTOHSCROLL
-    LTEXT           \"Light\", 1052, 20, 253, 36, 10
-    CONTROL         \"\", 1040, \"MW2Slider\", WS_TABSTOP, 58, 251, 52, 14
-    EDITTEXT        1041, 114, 251, 34, 14, ES_AUTOHSCROLL
-    LTEXT           \"Medium\", 1053, 20, 267, 36, 10
-    CONTROL         \"\", 1042, \"MW2Slider\", WS_TABSTOP, 58, 265, 52, 14
-    EDITTEXT        1043, 114, 265, 34, 14, ES_AUTOHSCROLL
-    LTEXT           \"Dark\", 1054, 20, 281, 36, 10
-    CONTROL         \"\", 1044, \"MW2Slider\", WS_TABSTOP, 58, 279, 52, 14
-    EDITTEXT        1045, 114, 279, 34, 14, ES_AUTOHSCROLL
     LTEXT           \"Radius\", 1057, 160, 211, 42, 10
     CONTROL         \"\", 1058, \"MW2Slider\", WS_TABSTOP, 204, 209, 48, 14
     EDITTEXT        1059, 254, 209, 34, 14, ES_AUTOHSCROLL
@@ -234,36 +271,47 @@ BEGIN
     LTEXT           \"Desat\", 1066, 160, 253, 42, 10
     CONTROL         \"\", 1067, \"MW2Slider\", WS_TABSTOP, 204, 251, 48, 14
     EDITTEXT        1068, 254, 251, 34, 14, ES_AUTOHSCROLL
-    LTEXT           \"Blur\", 1069, 160, 267, 42, 10
-    CONTROL         \"\", 1070, \"MW2Slider\", WS_TABSTOP, 204, 265, 48, 14
-    EDITTEXT        1071, 254, 265, 34, 14, ES_AUTOHSCROLL
+    CONTROL         \"Invert the grade\", 1103, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 251, 120, 11
 
-    LTEXT           \"Other Settings\", 1032, 20, 310, 140, 11
-    LTEXT           \"Toggle key\", 1055, 20, 325, 58, 11
-    CONTROL         \"\", 1016, \"MW2KeyBox\", WS_TABSTOP, 80, 322, 44, 15
-    CONTROL         \"Close with the game\", 1033, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 322, 134, 11
-    CONTROL         \"Mute the music\", 1018, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 350, 130, 11
-    CONTROL         \"Fullbright world\", 1019, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 364, 130, 11
-    CONTROL         \"Hide the HUD\", 1020, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 378, 130, 11
-    CONTROL         \"Disable the fog\", 1022, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 350, 124, 11
-    CONTROL         \"Hide the weapon model\", 1021, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 364, 124, 11
-    CONTROL         \"Hide the crosshair\", 1084, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 156, 378, 130, 11
+    LTEXT           \"Other Settings\", 1032, 20, 282, 140, 11
+    LTEXT           \"Toggle key\", 1055, 20, 297, 58, 11
+    CONTROL         \"\", 1016, \"MW2KeyBox\", WS_TABSTOP, 80, 294, 44, 15
+    LTEXT           \"Next profile\", 1102, 146, 297, 58, 11
+    CONTROL         \"\", 1101, \"MW2KeyBox\", WS_TABSTOP, 208, 294, 44, 15
+    CONTROL         \"Disable Music\", 1018, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 316, 92, 11
+    CONTROL         \"Fullbright\", 1019, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 330, 92, 11
+    CONTROL         \"Hide HUD\", 1020, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 344, 92, 11
+    CONTROL         \"Disable Fog\", 1022, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 114, 316, 92, 11
+    CONTROL         \"Hide Weapon model\", 1021, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 114, 330, 92, 11
+    CONTROL         \"Hide Crosshair\", 1084, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 114, 344, 92, 11
+    CONTROL         \"Numeric Ping\", 1095, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 208, 316, 78, 11
+    CONTROL         \"Third person view\", 1096, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 208, 330, 78, 11
+    CONTROL         \"Close with Game\", 1033, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 208, 344, 80, 11
 
-    LTEXT           \"Server\", 1091, 20, 406, 140, 11
-    CONTROL         \"Tweak the server\", 1093, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 420, 140, 11
-    LTEXT           \"Timescale\", 1085, 20, 434, 60, 10
-    CONTROL         \"\", 1086, \"MW2Slider\", WS_TABSTOP, 84, 433, 152, 14
-    EDITTEXT        1087, 240, 433, 46, 14, ES_AUTOHSCROLL
-    LTEXT           \"Gravity\", 1088, 20, 448, 60, 10
-    CONTROL         \"\", 1089, \"MW2Slider\", WS_TABSTOP, 84, 447, 152, 14
-    EDITTEXT        1090, 240, 447, 46, 14, ES_AUTOHSCROLL
+    LTEXT           \"Debug\", 1091, 20, 372, 140, 11
+    CONTROL         \"Tweak the debug settings\", 1093, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 386, 140, 11
+    LTEXT           \"Timescale\", 1085, 20, 400, 62, 10
+    CONTROL         \"\", 1086, \"MW2Slider\", WS_TABSTOP, 84, 399, 42, 14
+    EDITTEXT        1087, 128, 399, 26, 14, ES_AUTOHSCROLL
+    LTEXT           \"Prop Gravity\", 1088, 158, 400, 60, 10
+    CONTROL         \"\", 1089, \"MW2Slider\", WS_TABSTOP, 220, 399, 40, 14
+    EDITTEXT        1090, 262, 399, 26, 14, ES_AUTOHSCROLL
+    LTEXT           \"Blur\", 1069, 20, 414, 62, 10
+    CONTROL         \"\", 1070, \"MW2Slider\", WS_TABSTOP, 84, 413, 42, 14
+    EDITTEXT        1071, 128, 413, 26, 14, ES_AUTOHSCROLL
+    LTEXT           \"Z near\", 1097, 158, 414, 60, 10
+    EDITTEXT        1098, 220, 413, 68, 14, ES_AUTOHSCROLL
+    LTEXT           \"Sprint speed\", 1107, 20, 428, 62, 10
+    CONTROL         \"\", 1108, \"MW2Slider\", WS_TABSTOP, 84, 427, 42, 14
+    EDITTEXT        1109, 128, 427, 26, 14, ES_AUTOHSCROLL
+    CONTROL         \"MP paused\", 1110, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 158, 427, 130, 11
 
-    LTEXT           \"\", 1011, 26, 479, 262, 18
+    LTEXT           \"\", 1011, 26, 459, 262, 18
 
-    LTEXT           \"\", 1082, 20, 507, 106, 13
-    CONTROL         \"Check for update\", 1094, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 522, 90, 11
+    LTEXT           \"\", 1082, 20, 487, 106, 13
+    CONTROL         \"Check for update\", 1094, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 20, 502, 90, 11
 
-    CONTROL         \"Apply & save\", 1012, \"Button\", BS_OWNERDRAW | BS_DEFPUSHBUTTON | WS_TABSTOP, 132, 505, 78, 16
-    CONTROL         \"Close\", IDCANCEL, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 216, 505, 74, 16
+    CONTROL         \"Apply & save\", 1012, \"Button\", BS_OWNERDRAW | BS_DEFPUSHBUTTON | WS_TABSTOP, 132, 485, 78, 16
+    CONTROL         \"Close\", IDCANCEL, \"Button\", BS_OWNERDRAW | WS_TABSTOP, 216, 485, 74, 16
 END
 ")

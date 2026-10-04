@@ -545,13 +545,20 @@ The multiplayer clamp is **not** in `iw4sp.exe`. Use `iw4mp.exe`.
 
 | File | Image | Notes |
 |------|-------|-------|
-| `iw4sp.exe` | **x64** | single-player, 4,480,056 bytes |
-| `iw4mp.exe` | **x64** | multiplayer, 4,901,944 bytes |
-| `iw4mpold.exe` | x86 | old 32-bit MP |
-| `iw4x.exe` | **x86** | IW4x client — still 32-bit |
-| `iw4xxx.exe` | **x86** | IW4x variant |
-| `iw4sp_codmod.exe` | x86 | |
-| `zonebuilder.exe`, `CoDCleaner.exe`, launcher stubs | x86 | |
+| `iw4sp.exe` | **x64** (PE32+) | single-player, 4,480,056 bytes, base `0x140000000` |
+| `iw4mp.exe` | **x64** (PE32+) | multiplayer, 6,254,136 bytes, base `0x140000000` |
+| `iw4mpold.exe` | x86 (PE32) | old 32-bit MP, 4,704,752 bytes, base `0x400000` |
+| `iw4x.exe` | **x86** (PE32) | IW4x client — still 32-bit, 3,932,160 bytes, base `0x400000` |
+| `iw4x-launcher.exe` | **x64** (PE32+) | 40,338,259 bytes, 19 sections — the launcher, not the client |
+| `iw4sp_codmod.exe` | x86 | 3,514,008 bytes |
+| `zonebuilder.exe`, `CoDCleaner.exe`, `Unlinker.exe`, launcher stubs | x86 | |
+
+The image type is read from the COFF `Machine` field (`0x8664` x64, `0x14C` i386)
+and the optional-header `Magic` (`0x20B` PE32+, `0x10B` PE32). The figure of
+4,901,944 bytes recorded for `iw4mp.exe` here before matches no file in this
+install; the addresses below were all re-verified against the 6,254,136-byte
+file, and they still hold (`r_znear` registered at `0x2E387`, cached at
+`0x8CF7970`), so only the size was stale.
 
 So official SP **and** MP both need a 64-bit debugger, while the IW4x client is
 still 32-bit (`x32dbg`, and this project's x64 DLL cannot inject into it).

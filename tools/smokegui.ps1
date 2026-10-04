@@ -13,8 +13,10 @@
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -Click 1031,1023
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckDot
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckNote
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckNoteColour
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -CheckUpdate
 #   powershell -NoProfile -File smokegui.ps1 -Exe ... -SelectProfile 2 -ClickApply
+#   powershell -NoProfile -File smokegui.ps1 -Exe ... -SetEdit "1097=0.5" -ClickApply
 #
 # The top edges are the interesting part of the listing: the collapsible cards
 # pull everything below them up, so a diff of two runs says whether the layout
@@ -51,6 +53,19 @@ param(
     # Check that the note above the first card really did get the smaller font.
     # The control listing cannot show a font, so the two handles are compared.
     [switch]$CheckNote,
+    # Sample the note's box for the pixels it paints itself. It draws its own text
+    # - one word of it in the rejoin colour - and a text colour cannot be read back
+    # off a window, so the pixels are the only evidence.
+    [switch]$CheckNoteColour,
+    # Post the registered message the DLL posts when its next-profile key is
+    # pressed, so the launcher's half of that key can be driven from outside. The
+    # DLL's half - polling the key inside the game - cannot be reached from here.
+    [switch]$SendNextProfile,
+    # Type into number boxes, as "id=text,id=text", then tell the window the box
+    # lost the focus - which is what a user's tab or click away sends, and the only
+    # moment the window reads an edit back. Pair it with -ClickApply to see the
+    # typed numbers come out in the config.
+    [string]$SetEdit = '',
     # Click "Check for update" and read its label back. The check runs on its
     # own thread and only replaces the label when GitHub has answered, so this
     # waits for it to stop saying "Checking" - the label is the whole result.
@@ -77,6 +92,8 @@ public static extern int GetDlgCtrlID(System.IntPtr window);
 public static extern bool IsWindowVisible(System.IntPtr window);
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern bool PostMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
+[System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern uint RegisterWindowMessage(string name);
 [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
 public static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wparam, System.IntPtr lparam);
 [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
@@ -123,13 +140,18 @@ $CbGetLbText = 0x0149
 $CbSetCurSel = 0x014E
 $CbnSelChange = 1
 
-# WM_GETFONT, to read a control's font back out of it.
+# WM_GETFONT, to read a control's font back out of it, and WM_GETTEXT, to read a
+# control's text the one way that crosses a process boundary.
 $WmGetFont = 0x0031
+$WmGetText = 0x000D
 
 # Control messages used to drive the window from outside the process.
 $BmClick = 0x00F5
 $WmClose = 0x0010
 $WmLButtonDown = 0x0201
+$WmSetText = 0x000C
+# EN_KILLFOCUS: the window folds a typed number into its state on this one.
+$EnKillFocus = 0x0200
 
 # The slider is a custom control of the launcher's own, so it has its own
 # message for "set the position" instead of the trackbar's TBM_SETPOS
@@ -139,14 +161,29 @@ $SliderSetPosition = 0x8000 + 11
 $SliderGetPosition = 0x8000 + 12
 
 # The sliders worth watching: the frame cap, the three in the viewmodel card's
-# right-hand column (the two safe-area ones and the compass under them), and the
-# two testing ones.
-$SliderIds = @(1002, 1074, 1077, 1080, 1086, 1089)
+# right-hand column (the two safe-area ones and the compass under them), the two
+# testing ones, and the sprint scale in Other Settings.
+$SliderIds = @(1002, 1074, 1077, 1080, 1086, 1089, 1108)
 
 function Get-Text([IntPtr]$window) {
-    $buffer = New-Object System.Text.StringBuilder 512
-    [void][W.U]::GetWindowText($window, $buffer, $buffer.Capacity)
-    return $buffer.ToString()
+    # WM_GETTEXT, not GetWindowText. GetWindowText reads the *window name* of a
+    # window belonging to another process - the text a control was created with -
+    # so every edit box came back empty however many numbers were in it, and only
+    # statics and buttons, whose text is their window name, read back. WM_GETTEXT
+    # is answered by the control itself, so an edit's own buffer is reachable.
+    $buffer = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(1024)
+    try {
+        $length = [int][W.U]::SendMessage($window, $WmGetText, [IntPtr]1024, $buffer)
+        if ($length -gt 0) {
+            return [System.Runtime.InteropServices.Marshal]::PtrToStringUni($buffer)
+        }
+    } finally {
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($buffer)
+    }
+
+    # Nothing came back - the window has no text of its own, which for an empty
+    # edit is the answer rather than a failure.
+    return ''
 }
 
 function Get-Class([IntPtr]$window) {
@@ -334,8 +371,8 @@ foreach ($child in $children) {
 function Test-Dot([IntPtr]$window, [string]$when) {
     # The indicator is painted, not a control, so the only evidence that it is
     # there is the pixel. Its centre is 8.5 dialog units left of and 4.5 below the
-    # status control's top-left corner - the dot fills (12,532) to (23,543) and the
-    # status line starts at (26,533), so its centre (17.5,537.5) is that far from
+    # status control's top-left corner - the dot fills (12,478) to (23,489) and the
+    # status line starts at (26,479), so its centre (17.5,483.5) is that far from
     # the corner. Keep those two numbers in step with kStatusDotUnits. The units
     # come from the status line's own size, fixed by the template at 262x18.
     $statusControl = (Get-Children $window) | Where-Object { $_.Id -eq $KIdStatus } |
@@ -403,9 +440,9 @@ function Test-Dot([IntPtr]$window, [string]$when) {
     }
     # The box the status line sits in. Sampled just inside its bottom-left corner,
     # then walked downwards until the colour changes - that is the box's bottom
-    # edge. The dot is at (12,532)-(23,543) and the status control starts at
-    # (26,533), so du 12 at y 553 is inside the box and clear of both. The box is
-    # meant to end at du 555, which is about three pixels further down.
+    # edge. The dot is at (12,478)-(23,489) and the status control starts at
+    # (26,479), so du 12 at y 499 is inside the box and clear of both. The box is
+    # meant to end at du 501, which is about three pixels further down.
     $boxX = [int][math]::Round($rect.left - (14.0 * $unitX / 4.0))
     $boxY = [int][math]::Round($rect.top + (20.0 * $unitY / 8.0))
     $insidePixel = [W.U]::GetPixel($dc, $boxX, $boxY)
@@ -455,6 +492,52 @@ if ($CheckNote) {
     }
 }
 
+if ($CheckNoteColour) {
+    # The note paints its own text rather than letting the static control paint it,
+    # because the word naming the rejoin colour is drawn in that colour. Nothing can
+    # read a text colour back off a window, so this is a pixel sample of the note's
+    # box: the sentence is in the dim body colour and that one word in a plain
+    # yellow, so both a lit pixel and a yellow one have to be in there. The test for
+    # yellow compares it against the other two channels rather than looking for the
+    # exact value: at three quarters of the dialog font the glyphs are a pixel or
+    # two wide, and ClearType blends every one of them towards what is behind.
+    $note = $children | Where-Object { $_.Id -eq $KIdNote } | Select-Object -First 1
+    if ($note -eq $null) {
+        Write-Output ("note colour: FAIL - no control with id {0}" -f $KIdNote)
+    } else {
+        $noteRect = New-Object 'W.U+RECT'
+        [void][W.U]::GetWindowRect($note.Handle, [ref]$noteRect)
+        $dc = [W.U]::GetDC([IntPtr]::Zero)
+        $lit = 0
+        $yellow = 0
+        for ($y = $noteRect.top; $y -lt $noteRect.bottom; $y++) {
+            for ($x = $noteRect.left; $x -lt $noteRect.right; $x++) {
+                $pixel = [W.U]::GetPixel($dc, $x, $y)
+                if ($pixel -eq 0xFFFFFFFF) { continue }
+                $r = [int]($pixel -band 0xFF)
+                $g = [int](($pixel -shr 8) -band 0xFF)
+                $b = [int](($pixel -shr 16) -band 0xFF)
+                # Anything that is not the window background is part of the note.
+                if (([math]::Abs($r - 0x16) + [math]::Abs($g - 0x18) +
+                     [math]::Abs($b - 0x15)) -gt 60) {
+                    $lit++
+                }
+                if (($r - $b) -gt 90 -and ($g - $b) -gt 60 -and $r -gt 180) {
+                    $yellow++
+                }
+            }
+        }
+        [void][W.U]::ReleaseDC([IntPtr]::Zero, $dc)
+        if ($yellow -eq 0) {
+            Write-Output ("note colour: FAIL - no yellow pixel in the note's box ({0},{1})-({2},{3}), {4} lit" -f `
+                $noteRect.left, $noteRect.top, $noteRect.right, $noteRect.bottom, $lit)
+        } else {
+            Write-Output ("note colour: ok - {0} lit pixel(s), {1} of them yellow, in the note's box" -f `
+                $lit, $yellow)
+        }
+    }
+}
+
 if ($SelectProfile -gt 0) {
     $combo = $children | Where-Object { $_.Id -eq $KIdProfileCombo } | Select-Object -First 1
     if ($combo -eq $null) {
@@ -467,6 +550,42 @@ if ($SelectProfile -gt 0) {
         Start-Sleep -Milliseconds 300
         Write-Output ("profile box: chose slot {0} (id {1})" -f $SelectProfile, $KIdProfileCombo)
     }
+}
+
+if ($SetEdit) {
+    foreach ($pair in $SetEdit.Split(',', [System.StringSplitOptions]::RemoveEmptyEntries)) {
+        $parts = $pair.Split('=')
+        if ($parts.Count -ne 2) {
+            Write-Output ("FAIL: -SetEdit wants id=text, got '{0}'" -f $pair)
+            continue
+        }
+        $id = [int]$parts[0].Trim()
+        $text = $parts[1].Trim()
+        $control = (Get-Children $dialog) | Where-Object { $_.Id -eq $id } |
+            Select-Object -First 1
+        if ($control -eq $null) {
+            Write-Output ("FAIL: no control with id {0}" -f $id)
+            continue
+        }
+        # Set the text, then send the notification the window acts on. WM_SETTEXT
+        # alone changes what is on screen and nothing else: every value in this
+        # window is read back when its box loses the focus.
+        [void][W.U]::SendMessageText($control.Handle, $WmSetText, [IntPtr]::Zero, $text)
+        $command = [IntPtr]((($EnKillFocus -shl 16) -bor $id))
+        [void][W.U]::SendMessage($dialog, $WmCommand, $command, $control.Handle)
+        Start-Sleep -Milliseconds 150
+        Write-Output ("edit {0}: typed '{1}', box reads '{2}'" -f `
+            $id, $text, (Get-Text $control.Handle))
+    }
+}
+
+if ($SendNextProfile) {
+    Write-Output ""
+    $message = [W.U]::RegisterWindowMessage('MW2UnlockerNextProfile')
+    Write-Output ("the next-profile message is {0}; posting it..." -f $message)
+    [void][W.U]::PostMessage($dialog, $message, [IntPtr]::Zero, [IntPtr]::Zero)
+    Start-Sleep -Milliseconds 800
+    Show-ProfileBox $dialog 'after the next-profile message'
 }
 
 if ($CheckDot) { Test-Dot $dialog 'at launch' }

@@ -12,9 +12,22 @@ namespace {
 
 HMODULE g_self = nullptr;
 
-// The in-game hotkey. Written by the control window and read by the worker loop,
-// and both of those run on this thread, so it needs no synchronisation.
-int g_toggleKey = 0x75; // F6
+// The two in-game hotkeys. Written by the control window and read by the worker
+// loop, and both of those run on this thread, so they need no synchronisation.
+// They are not per-profile: the launcher keeps them in the working config's
+// [general] section, so switching profile leaves both keys where they are.
+int g_toggleKey = 0x75;      // F6
+int g_nextProfileKey = 0x77; // F8
+
+// The second key asks the *launcher* for the next profile: this process cannot
+// switch profiles itself, because the launcher owns the profile files and its
+// Apply is what pushes the new values back here through the live channel.
+// RegisterWindowMessageW gives two processes the same number for the same string,
+// which is the whole point of it, and the launcher's dialog is found by its title
+// because the launcher has no control window of its own to look up.
+constexpr wchar_t kNextProfileMessageName[] = L"MW2UnlockerNextProfile";
+constexpr wchar_t kLauncherWindowTitle[] = L"MW2 Unlocker";
+UINT g_nextProfileMessage = 0;
 
 std::wstring GetModuleDirectory(HMODULE module) {
     wchar_t path[MAX_PATH] = {};
@@ -71,12 +84,19 @@ LRESULT CALLBACK LiveWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM
         ipc::Values values{};
         std::memcpy(&values, data->lpData, sizeof(values));
 
-        // The hotkey is carried in the same message even though features::ApplyLive
-        // has no use for it: this is the thread that polls for it.
+        // The hotkeys are carried in the same message even though
+        // features::ApplyLive has no use for them: this is the thread that polls
+        // for them.
         if (values.toggleKey >= 0x70 && values.toggleKey <= 0x7B &&
             values.toggleKey != g_toggleKey) {
             g_toggleKey = values.toggleKey;
             mwlog::Line("ipc: toggle key is now 0x%X (F%d)", g_toggleKey, g_toggleKey - 0x70 + 1);
+        }
+        if (values.nextProfileKey >= 0x70 && values.nextProfileKey <= 0x7B &&
+            values.nextProfileKey != g_nextProfileKey) {
+            g_nextProfileKey = values.nextProfileKey;
+            mwlog::Line("ipc: next-profile key is now 0x%X (F%d)", g_nextProfileKey,
+                        g_nextProfileKey - 0x70 + 1);
         }
 
         const bool changed = ApplyLiveGuarded(&values);
@@ -127,7 +147,9 @@ DWORD WINAPI WorkerThread(LPVOID /*unused*/) {
     }
 
     const int delayMs = config.GetInt("general", "delayMs", 5000);
-    g_toggleKey = config.GetInt("general", "toggleKey", 0x75); // F6
+    g_toggleKey = config.GetInt("general", "toggleKey", 0x75);           // F6
+    g_nextProfileKey = config.GetInt("general", "nextProfileKey", 0x77); // F8
+    g_nextProfileMessage = ::RegisterWindowMessageW(kNextProfileMessageName);
     // Some cvars are re-initialised by the engine after we write them - cg_fov
     // in particular when a level loads or the player respawns - so by default we
     // keep checking and re-apply anything the game has reset.
@@ -153,7 +175,9 @@ DWORD WINAPI WorkerThread(LPVOID /*unused*/) {
         mwlog::Line("apply failed: %s", features::LastError());
     }
 
-    mwlog::Line("hotkey 0x%X toggles patches; DLL worker is running", g_toggleKey);
+    mwlog::Line("hotkey 0x%X toggles patches, 0x%X asks for the next profile", g_toggleKey,
+                g_nextProfileKey);
+    mwlog::Line("DLL worker is running");
     if (keepApplied != 0) {
         mwlog::Line("keeping the values applied (checking every %d ms)", keepAliveMs);
     }
@@ -167,6 +191,7 @@ DWORD WINAPI WorkerThread(LPVOID /*unused*/) {
     }
 
     bool previousDown = false;
+    bool previousProfileDown = false;
     DWORD lastKeepAlive = ::GetTickCount();
 
     for (;;) {
@@ -185,6 +210,21 @@ DWORD WINAPI WorkerThread(LPVOID /*unused*/) {
             lastKeepAlive = ::GetTickCount();
         }
         previousDown = down;
+
+        // The next-profile key only asks: the answer comes back as a live update,
+        // because the launcher applies the slot it loaded. Posted rather than sent,
+        // so a launcher that is busy cannot stall the game's thread.
+        const bool profileDown = (::GetAsyncKeyState(g_nextProfileKey) & 0x8000) != 0;
+        if (profileDown && !previousProfileDown) {
+            const HWND launcher = ::FindWindowW(nullptr, kLauncherWindowTitle);
+            if (launcher != nullptr && g_nextProfileMessage != 0) {
+                ::PostMessageW(launcher, g_nextProfileMessage, 0, 0);
+                mwlog::Line("next-profile key: asked the window for the next slot");
+            } else {
+                mwlog::Line("next-profile key: no window to ask for the next slot");
+            }
+        }
+        previousProfileDown = profileDown;
 
         if (keepApplied != 0 && keepAliveMs > 0) {
             const DWORD now = ::GetTickCount();

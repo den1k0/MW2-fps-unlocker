@@ -38,7 +38,7 @@ param(
 # the DLL checks cbData against its own sizeof(Values) and the version against
 # its own protocol version, and refuses anything that does not match - by design,
 # because a struct that has drifted is a struct that will corrupt memory.
-$ProtocolVersion = 16
+$ProtocolVersion = 26
 
 $ErrorActionPreference = 'Stop'
 
@@ -56,6 +56,9 @@ public struct Values {
     public int counterMode;
     public int netFpsEnabled;
     public int toggleKey;
+    // The second hotkey: the DLL polls it and posts a registered message to the
+    // launcher, which is the half of the chain this host cannot exercise.
+    public int nextProfileKey;
     public int sensitivityEnabled;
     public float sensitivityValue;
     public int musicEnabled;
@@ -89,6 +92,25 @@ public struct Values {
     public float timescale;
     public float physGravity;
     public int serverEnabled;
+    public int numericPing;
+    // The film grade's invert flag, the switch at the foot of the film tweak card.
+    // A plain int with no gate, so the switch is the flag - off restores the
+    // engine's value.
+    public int filmInvert;
+    // The sprint speed scale, at the foot of the Debug card. Its value here is the
+    // engine's own 1.5 in MakeDefault, so a receiver that ignored the field could be
+    // told apart from one that read it. The dual-wield switch that arrived with it
+    // is gone: it was tried and did nothing.
+    public float sprintSpeedScale;
+    // The mp_paused switch beside it, off by default.
+    public int mpPaused;
+    // The third-person switch, in "Other Settings" with the other switches.
+    public int cameraThirdPerson;
+    // The near clip plane: the one row of the "Debug" card at the foot of the
+    // window. The subwindow's four floats and shaderDebug stood here for a build;
+    // both worked and both were dropped, so they are gone from both sides. See
+    // src/ipc.h.
+    public float znear;
 }
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -190,7 +212,8 @@ public static long Push(uint magic, uint version, int fps, float fov, int server
     v.netFpsEnabled = 0;
     // Straight from ipc::MakeDefault(): anything but 0x70..0x7B is ignored by
     // the receiver, so this also proves the field was unmarshalled correctly.
-    v.toggleKey = 0x76; // F7, not the default F6, so the log shows the change
+    v.toggleKey = 0x76;      // F7, not the default F6, so the log shows the change
+    v.nextProfileKey = 0x78; // F9, not the default F8, for the same reason
     v.sensitivityEnabled = 1;
     v.sensitivityValue = 3.45f;
     v.musicEnabled = 1;
@@ -227,6 +250,22 @@ public static long Push(uint magic, uint version, int fps, float fov, int server
     // them. In this host neither can be located, so the log stops short of saying
     // which - the real game is where the difference shows.
     v.serverEnabled = server;
+    // The numeric ping switch. 1 asks for the number instead of the scoreboard's
+    // graph, and like the server switch it is read by the DLL rather than by the
+    // config, so the value here is what the log line reports.
+    v.numericPing = 1;
+    // The film grade's invert flag, pushed on so the log names it.
+    v.filmInvert = 1;
+    // A sprint scale that is not the default: 1.75 rather than 1.5, so the log shows
+    // the field was marshalled. And the mp_paused switch on, so the log names it.
+    v.sprintSpeedScale = 1.75f;
+    v.mpPaused = 1;
+    // The switch, and the value that is the whole of the "Debug" card. The
+    // third-person switch writes 1 when it is ticked, and r_znear is the near
+    // clip plane - pushed well past the old 100 ceiling on purpose, so a
+    // receiver that clamped the range would be caught here.
+    v.cameraThirdPerson = 1;
+    v.znear = 150.0f;
 
     int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Values));
     System.IntPtr payload = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);

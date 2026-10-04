@@ -99,25 +99,61 @@ Both findings are written up with the evidence in
 | `[safeArea_adjusted_horizontal]`, `[safeArea_adjusted_vertical]` | `enabled`, `value` | The HUD safe area: the fraction of the screen the 2D overlay is laid out within, so a smaller number pulls the HUD towards the centre. Floats registered at 1.0 — the pair the game's own Options > Safe Area menu writes, and what `getadjustedsafearea*` returns. One switch and two sliders, in a second column of the viewmodel card. |
 | `[safeArea_horizontal]`, `[safeArea_vertical]` | `enabled`, `value` | The base pair of the same family, registered at 0.85 and read by the code that builds the overlay rectangles. **Not in the window**: it was wired to sliders alongside the adjusted pair and moving it changed nothing on screen, so it was taken back out — the same treatment black level and the sensitivity got. Still applied if switched on in the file. |
 | `[compassSize]` | `enabled`, `value` | `compassSize` — "Scale the compass", the size the compass strip is drawn at. A float registered at 1.0 with 0 as its minimum and `FLT_MAX` as its maximum, read from `+0x10` in ten places. A HUD size, so the window keeps it in the safe-area column — but **not** behind that column's switch: it has no gate of its own, so it is written whenever the window saves and applied with everything else, the way blur is, which also means unticking the safe area no longer hands the compass back to the game's own value. The slider stops at 5.00 because the engine offers no ceiling to follow. **0 crashes the game** — a scale of zero collapses the compass geometry and something downstream divides by it — so the slider and its number box stop at 0.1 and the live path floors the value again on the way out. The config file is not floored, and says so. |
-| `[cg_drawCrosshair]` | `enabled`, `value` | An int registered at 1 — "Turn on weapon crosshair", cached at `0x809990` — and read once as a byte gate (`cmp byte ptr [rax + 0x10], 0`) over a block of HUD code, so any non-zero value draws it. The window's fourth switch row, *Hide the crosshair*, is inverted on purpose: enabling it writes the fixed 0, so `enabled=1` here means "hidden". |
-| `[timescale]` | `enabled`, `value` | The game's own clock. A float registered at 1.0 and read as one (`movss` at `+0x1F427D`), cached at `0x1D26580`; 1.0 is neutral, below it slows the game down and above it speeds everything up. Gated by the *Server* card's one switch, which is written to this section's `enabled` **and** to `[phys_gravity]`'s — and with the switch off the cvar is *restored*, so the game's own value comes back rather than the unlocker merely not writing. Its slider covers 0.10 to 5.00 in hundredths. TESTING. |
-| `[phys_gravity]` | `enabled`, `value` | "Physics gravity in units/sec^2." — the gravity on *objects* rather than on the player. A float registered through the float helper at 800, cached at `0x1B53BE0`; 800 is neutral and a negative number inverts it. Gated with the timescale by the *Server* card's one switch, and restored when that is off: a slider over whole units from -2000 to 2000 that starts at **-800** — the same magnitude as the engine's own with the sign flipped, which is the end of the range worth trying in a match; 800 is what to set to put the game back as it was. Not `g_gravity`: the multiplayer binary does not register that name at all — it is in `iw4sp.exe` at `0x75FC6` — so this is the multiplayer equivalent. TESTING. |
-| `[r_filmTweakContrast]`, `[r_filmTweakBrightness]`, `[r_filmTweakDesaturation]`, `[r_filmTweakLightTint]`, `[r_filmTweakMediumTint]`, `[r_filmTweakDarkTint]` | `enabled`, `value` | The grade's six parameters, registered at 1.4, 0, 0.2 and 1.1, 0.9, 0.7. Sliders in the window; only read while the grade itself is on. The tints are *colour* dvars — the section writes one grey level into each of their three colour components — and `r_filmTweakInvert` is a flag, so it alone is not offered. |
+| `[cg_drawCrosshair]` | `enabled`, `value` | An int registered at 1 — "Turn on weapon crosshair", cached at `0x809990` — and read once as a byte gate (`cmp byte ptr [rax + 0x10], 0`) over a block of HUD code, so any non-zero value draws it. The window's *Hide Crosshair* switch, in *Other Settings*, is inverted on purpose: enabling it writes the fixed 0, so `enabled=1` here means "hidden". |
+| `[cg_scoreboardPingText]` | `enabled`, `value` | The scoreboard's ping *number*: an int registered with **0** — "Whether to show numeric ping value" — read at `+0x10` in two places (`0xE388E`, `0xE4625`) where the flag picks one of two layout tables. The window's *Numeric Ping* switch keeps its state in this section, and writes the value as 1. |
+| `[cg_scoreboardPingGraph]` | `enabled`, `value` | The scoreboard's ping *bars*: an int registered with **1** — "Whether to show graphical ping" — read once as a gate (`0xE3E54`: `cmp byte ptr [rax + 0x10], 0; je <skip>`) over its drawing block. The same switch writes 0 here, because the number is drawn only where the graph is not; switching off restores both defaults. See *Music and the other switches*. |
+| `[timescale]` | `enabled`, `value` | The game's own clock. A float registered at 1.0 and read as one (`movss` at `+0x1F427D`), cached at `0x1D26580`; 1.0 is neutral, below it slows the game down and above it speeds everything up. Gated by the *Debug* card's one switch, which is written to this section's `enabled` **and** to `[phys_gravity]`'s — and with the switch off the cvar is *restored*, so the game's own value comes back rather than the unlocker merely not writing. Its slider covers 0.50 to 5.00 in hundredths, and the floor is measured rather than the engine's: the registration passes 0.001 and nothing clamps the value, but below about 0.5 the game's own time sync fights the slowdown and rubberbands, so the window starts where the engine still delivers. TESTING. |
+| `[phys_gravity]` | `enabled`, `value` | "Physics gravity in units/sec^2." — the gravity on *objects* rather than on the player. A float registered through the float helper at 800, cached at `0x1B53BE0`; 800 is neutral and a negative number inverts it. Gated with the timescale by the *Debug* card's one switch, and restored when that is off: a slider over whole units from -2000 to 2000 that starts at **-800** — the same magnitude as the engine's own with the sign flipped, which is the end of the range worth trying in a match; 800 is what to set to put the game back as it was. Not `g_gravity`: the multiplayer binary does not register that name at all — it is in `iw4sp.exe` at `0x75FC6` — so this is the multiplayer equivalent. TESTING. |
+| `[camera_thirdPerson]` | `enabled` | "Use third person view globally". An int registered in the block that also holds `bg_forceDualWield` and `camera_thirdPersonOffset`, cached at `0x58D790`, and read by code as a gate in four places — `0x8A696` is a predicate that answers whether third person is forced, returning false both while the dvar is 0 and when the entity's state carries the first-person flags. The window's *Third person view* switch, in *Other Settings*, writes 1 and hands the engine's own value back when it is not ticked. Off by default: it changes what the game draws. |
+| `[player_sprintSpeedScale]` | `enabled`, `value` | "The scale applied to the player speed when sprinting". A float registered at **1.5** between 0 and **2.0** (rva `0x8C17B`; the two constants are at `0x3CA870` and `0x3CA980`), cached at `0x58D728` and read twice — `0x8F7F5` and `0x90678` — each `mov rax, [cache]; mulss reg, dword ptr [rax + 0x10]`. So it *scales* a value already on its way into the movement code rather than replacing it, and a live write is enough. **No gate**, like blur: the section is always on and only the value moves. The window's *Sprint speed* slider is the third row of the *Debug* card at the foot of the window, covering the registration's whole 0.00 to 2.00; it starts at the engine's own 1.50, so a slider nobody touches writes what the game already has — and note that 1.00, which reads like "normal", is two thirds of the speed the game actually ships. |
+| `[mp_paused]` | `enabled` | "If true ignore server time advancing.  Handy for taking hi-resolution screenshots without the world moving". An int registered at **0** in the multiplayer binary only, cached at `0x5AF6C8` and read once (`0xB81CB`). **No gate**, so the window's *MP paused* switch, beside the sprint scale on the Debug card's last row, is the flag itself: on writes the fixed 1, off hands the engine's own 0 back. |
+| `[bg_forceDualWield]` | `enabled` | "Force akimbo for all possible weapons". An int registered at **0** (registration rva `0x8B215`, flags `0xC`), cached at `0x589C18`, read in three places — `0x99D8A`, `0x18837E`, `0x18849A`. **Tried, and discarded**: the window offered it as a *Force dual wield* switch for a build, and the switch moved nothing in a match — the dvar is read, but not anywhere that changes a match — so the control has been taken out. The section is file-only now, so a value set here is still written. The name has to be spelled with the capital W, because the unlocker finds a dvar by its exact name string. |
+| `[r_znear]` | `enabled`, `value` | "Things closer than this aren't drawn.  Reducing this increases the depth precision" — the near clip plane. A float read once at `0x24440`, inside the view-setup function that also reads `r_subwindow`, as `movss xmm0, 0.01; mov rax, [cache]; maxss xmm0, dword ptr [rax + 0x10]`, so the value is **floored at 0.01**: the window's 0.00 behaves as 0.01. The same block can override the near plane with a per-view value the caller passes (`[rbx+0x38]`, when it is above zero), and that is the view that uses `r_znear_depthhack` — "Viewmodel near clip plane", default 0.1 — so a large `r_znear` clips the world while the viewmodel's own near stays put. The registration's own limits are 0.001 and **10000** (loaded from rva `0x3CA70C` and `0x3CAB0C`), so the window's 0.00-to-999.00 range sits well inside them; 100 was the window's ceiling rather than the engine's. **No gate**, like blur: the section is always on and only the value moves. The window's *Z near* box is the second row of the *Debug* card, beside blur, and it starts at 4.00, the engine's own value, so an untouched box writes what is already there. The row rides the card's switch, so the box is only in reach with the card open, while the value itself is written either way. |
+| `[r_filmTweakInvert]` | `enabled` | "Tweak dev var; enable inverted video" — an int registered at **0** (cached at `0x8CF7A20`, flags `0x40`) and read once, where it flips the grade's colour. **No gate**, so the window's *Invert the grade* switch is the flag itself: ticking it writes `enabled=1` (the `value` of 1) and unticking restores the engine's own 0. The switch is the fourth row of the film tweak card's left column, level with the glow column's *Desat* slider, and it rides the film tweak switch like the grade's rows do, so it appears only while *Enable the film tweak* is on. TESTING. |
+| `[cg_footsteps]` | `enabled` | "Play footstep sounds" — an int registered at **1** (cached at `0x809BB0`) and read as a gate in four places. Inverted on purpose, like `[cg_drawCrosshair]`: the value written is 0, which makes it silent — a section writing 1 would write what the engine already holds and change nothing. **Not in the window**: it was the *Mute Footsteps* switch for a build, was tried, and did not earn a permanent control, so it is file-only now, applied if switched on here. TESTING. |
+| `[ui_debugMode]` | `enabled` | "Draw ui debug info on the screen." — an int registered at **0** (cached at `0x65FEE68`) and read as a gate five times in multiplayer and five in single player. **Not in the window**: it was the *UI debug* switch for a build, was tried, and did not earn a permanent control, so it is file-only now, applied if switched on here. TESTING. |
+| `[r_filmTweakContrast]`, `[r_filmTweakBrightness]`, `[r_filmTweakDesaturation]`, `[r_filmTweakLightTint]`, `[r_filmTweakMediumTint]`, `[r_filmTweakDarkTint]` | `enabled`, `value` | The grade's six parameters, registered at 1.4, 0, 0.2 and 1.1, 0.9, 0.7. The first three have sliders in the window, and are only read while the grade itself is on; the three tints are file-only now, having lost their sliders when the card was compacted. The tints are *colour* dvars — the section writes one grey level into each of their three colour components — and `r_filmTweakInvert` is a flag, so it is a switch of its own rather than a slider here. |
 | `[r_glow_allowed]`, `[r_glow]`, `[r_glowUseTweaks]`, `[r_glowTweakEnable]` | `enabled`, `value` | The glow tweak's four gates, each written as 1 by the one switch in the window. All four ship at 0 apart from `r_glow`, so the bloom parameters are inert until every one of them is open — the film tweak's two-gate trap, one level deeper. |
 | `[r_glowTweakRadius0]`, `[r_glowTweakBloomIntensity0]`, `[r_glowTweakBloomCutoff]`, `[r_glowTweakBloomDesaturation]` | `enabled`, `value` | The bloom itself, registered at 5, 20, 0.5 and 0. Sliders in the window, and turned up far they wash the screen out completely. |
-| `[r_blur]`, `[r_blacklevel]` | `enabled`, `value` | "Dev tweak to blur the screen" and "Black level (negative brightens output)". Floats registered at 0, the second of them between -0.99 and +0.99. **No gate** — nothing in the game switches them and 0 is neutral — so the window writes both whenever it saves. Blur is confirmed working and carries a slider at the foot of the glow column; black level does not, because only two of its four references are real value reads (`+0x30B14`, `+0xF1790`) and both sit in a set-up path rather than the frame loop — a slider for it changed nothing visible, so the section is file-only, like `[sensitivity]`. |
+| `[r_blur]`, `[r_blacklevel]` | `enabled`, `value` | "Dev tweak to blur the screen" and "Black level (negative brightens output)". Floats registered at 0, the second of them between -0.99 and +0.99. **No gate** — nothing in the game switches them and 0 is neutral — so the window writes both whenever it saves. Blur is confirmed working and carries a slider at the foot of the glow column, covering the engine's whole range, 0.00 to 32.00: that ceiling is the registration's own maximum (the float helper's `xmm3`, loaded from rva `0x3CAA74`) and its only reader at `0x637D5` merely tests the value against zero and squares it into a length, so neither the engine's `set` nor the renderer clamps it at run time either. Black level has no slider, because only two of its four references are real value reads (`+0x30B14`, `+0xF1790`) and both sit in a set-up path rather than the frame loop — a slider for it changed nothing visible, so the section is file-only, like `[sensitivity]`. |
 | `[sensitivity]` | `enabled`, `value` | `sensitivity`. **Not in the window** — writing the cvar was measured not to change the aim in game, so the slider was removed rather than left promising something that does not happen. Still applied if switched on here: the cvar *and* a `seta sensitivity "..."` line in the game's own settings file. Off by default because it changes how the game plays. |
 | `[drawfps]` | `enabled`, `value` | `cg_drawFPS`, an enum: 0 Off, 1 Simple, 2 SimpleRanges, 3 Verbose, 4 Verbose+Viewpos. **Single player only** - see below. |
 | `[netfps]` | `enabled`, `value` | `sv_network_fps`, the only counter multiplayer reads. It is the network rate, not the frame rate. |
 | `[lagometer]` | `enabled`, `value` | `drawLagometer`. Registered in multiplayer and read by nothing, so it does nothing; the switch is kept so that claim can be re-tested. |
 
+Two more sections were here for a build and are gone, having been tried in a match:
+`[subwindow_left]` with its three siblings — the four components of `r_subwindow`,
+one section per component because a section writes one value into every offset it
+lists — and `[r_debugShader]`. Both did exactly what the analysis predicted: the
+subwindow scales and shifts the frame the renderer draws, and the shader mode draws
+the shaders' own basis vectors. Both were dropped because neither is something to
+play with. The sections are no longer understood, so a config that still carries them
+does nothing; what the analysis found is kept in `docs/feature-report.md`.
+
 The window covers the frame cap, the field of view, the viewmodel offsets and the
-HUD safe area with the compass size, the film tweak and its six parameters, the
-glow tweak's four plus blur, and — under *Other Settings* — the six switches, the
-in-game hotkey with "close with the game" at the right-hand end of its row. Below
-that, in a card of its own, is *Server*: the two testing settings, the timescale and
-the physics gravity, behind **one switch that gates both of them** and folded away
-until it is ticked, so a window that is not testing anything does not carry them.
+HUD safe area with the compass size, the film tweak's three grade sliders, the
+glow tweak's four, and — under *Other Settings* — a three-by-three grid of nine
+switches, with the two hotkeys side by side above them (*Toggle key* on the left,
+*Next profile* on the right). *Close with Game*, the last of the nine, is a
+launcher setting rather than a cvar: it says whether the window closes when the
+game does. Four of the
+rows in
+that card are drawn in a plain yellow rather than in the body text's off-white — the
+*Disable Music* and *Fullbright* switches and the safe area's *Horiz. adj.* and
+*Vert. adj.* labels — because the game only re-reads them when a match is set up.
+The note above the first card names that colour and draws the word itself in it,
+which is why the note is the window's one owner-drawn static. Below that, in a card
+of its own, is the card at the foot, *Debug* — the card that used to be called
+*Server*. It carries one switch and three rows: the timescale and the prop gravity
+(labelled *Prop Gravity*, since it is the gravity on objects rather than on the
+player) behind **one switch that gates them**, and, beside them, blur — moved in
+here from the glow column — and the near plane; the last row holds the sprint
+scale, moved down from *Other Settings*, with the *MP paused* switch beside it,
+which stops the server's clock advancing so a hi-resolution screenshot is not
+spoiled by the world moving. Folding the card hides all three rows; the switch is a
+real gate for the two testing settings, while blur, the near plane, the sprint
+scale and *MP paused* are written either way because none of them has a gate to be
+closed. The bottom of the template was re-measured for the new rows.
 The counters are file-only for now, which is why the window
 reads them without rewriting them: pushing the values back must not switch off
 something the file turned on. Read the sensitivity row before enabling it — it is
@@ -136,11 +172,35 @@ copied, or handed to somebody else like any other config.
 |---|---|
 | **Choosing a slot** | Loads it into the window: every setting in it at once, through the same code start-up uses, so nothing is left over from the settings that were there before. The window is then laid out again, because the switches a profile carries decide which rows are showing. A slot that has never been used has no file yet, and choosing it says so rather than inventing values. |
 | **Apply & save** | Is what stores them: it writes the working config as always, and then the window's values into the slot it is on. A slot's first save starts the file as a copy of the working config, so it carries the comments and any section the window does not offer. |
+| **Next profile** | Is a *key*, not a button: an in-game hotkey that moves to the next slot, loads it and then does what **Apply & save** does, so a match can be switched between profiles from the keyboard. It wraps: 1, 2, 3, 1, and the dropdown is moved with it, because the dropdown is what shows which slot is in use. |
 
 Loading a slot does not apply anything on its own — press **Apply & save** for that,
-as with any other change. The window always opens on **Profile 1** and loads it if
-the file exists, so that slot is the setting the tool starts from; delete the file,
-or rename another profile over it, to change what that is.
+as with any other change. The next-profile key is the exception: it loads *and*
+applies, which is the whole point of it. The window always opens on **Profile 1** and
+loads it if the file exists, so that slot is the setting the tool starts from;
+delete the file, or rename another profile over it, to change what that is.
+
+**The two hotkeys are not part of a profile.** The toggle key and the next-profile
+key live in the working config's `[general]` section, so switching profile leaves
+both where they are — a profile file does not carry them at all (the window leaves
+them out when it writes a slot), and loading a slot re-reads them from the working
+config. The alternative — a key per profile — was rejected for the obvious reason:
+a key that changes when you switch profiles is a key you cannot use to switch
+profiles. They are set by the two boxes under *Other Settings*, side by side —
+*Toggle key* on the left and *Next profile* on the right — which step through
+F1..F12, and Apply writes the lines `toggleKey=` and `nextProfileKey=` in
+`[general]`.
+
+The next-profile key also needs both halves of the tool to be talking, and the
+split is deliberate: the key is polled **inside the game's process** by the DLL,
+because that is the only place a keypress is certainly visible, and the DLL then
+posts a registered message to the launcher's window — it cannot switch profiles
+itself, because the launcher is what owns the profile files. The launcher answers by
+loading the next slot and applying it, which is the same code path as the *Apply &
+save* button and therefore also what pushes the new values into the running game.
+So one keypress is: key → DLL → message → launcher loads and applies → live channel
+→ game. If the launcher is not open the key logs that it had nobody to ask, and if
+the game is not injected the launcher's Apply simply saves the file.
 
 The viewmodel, film tweak and *Server* cards fold away. Each has a switch directly
 under its title and a stack of sliders under that, and the stack is worth nothing
@@ -156,24 +216,33 @@ stays open while *either* of its switches is on. The viewmodel card has the thre
 offsets on the left and the safe area's two sliders with the compass under them on
 the right — three rows against three, which is why the card is the same height as
 it was before the safe area was added; the film card has the grade on the left and
-the glow on the right, with blur at the foot of the glow column. Ticking one switch
-alone brings its column out and leaves the other folded. Blur has no gate of its
-own, so it keeps working whichever way the switches are set; it simply lives in
-the glow column, and its slider is in reach when that column is open. The compass
+the glow on the right, and the *Invert the grade* switch is the left column's fourth
+row, level with the glow column's *Desat* slider. Ticking one
+switch alone brings its column out and leaves the other folded. The compass
 under the safe area is the same shape: it has no gate of its own either, so
 ticking the safe-area switch only brings its slider into reach — its value is
-written and applied either way.
+written and applied either way. Blur has no gate either, but it no longer lives
+in this card: it moved to the Debug card, so its slider and the near plane's box
+are both in reach whenever that card is open.
 
-The Server card is the simple case: one switch, two rows, and the switch is a real
-gate rather than only a disclosure — with it folded the two testing settings are
-*restored* to the game's own values, not merely left unwritten. It starts folded,
+The Debug card is the simple case: one switch and two rows, and the switch is a
+real gate rather than only a disclosure — with it folded the timescale and the
+gravity are *restored* to the game's own values, not merely
+left unwritten, while blur and the near plane are written either way because
+neither has a gate to be closed. It starts folded,
 so the card is one switch high until it is wanted; and because the profile the
 window opens on carries that switch like any other setting, a slot saved with it
 on brings the card out with it.
 `tools/smokegui.ps1 -Click 1031,1023` toggles the viewmodel and film switches from
-outside and prints the window's size after each click, which is how the layout is
-checked without anyone watching; `-Click 1093` does the same for the Server card
-(541x666 folded, 541x718 open).
+outside and prints the window's size after each click (541x676 with the film folded,
+541x779 with it out), which is how the layout is
+checked without anyone watching; `-Click 1093` does the same for the Debug card
+(541x676 folded, 541x753 open), and `-SendNextProfile` posts the registered message
+the DLL posts for the next-profile key, which is how the launcher's half of that key
+is driven from outside - the half inside the game cannot be reached from a script.
+`-SetEdit "1098=150" ... -ClickApply` types into a
+number box the way a user does — set the text, then the notification that the box
+lost the focus — which is the only path a typed value takes.
 
 The small circle beside the status line at the foot of the window says what the
 unlocker is doing at a glance: green once it has injected and the game is
@@ -379,13 +448,23 @@ cvars and a longer explanation than a row could hold). They are all the same kin
 of thing: a cvar whose value *is* the setting, so the switch writes a fixed
 number and there is nothing to drag.
 
+*Numeric Ping* is the one switch in that card which writes **two** cvars, and the
+reason is that the scoreboard's ping display is a pair with opposite senses:
+`cg_scoreboardPingText` is registered 0 ("Whether to show numeric ping value") and
+`cg_scoreboardPingGraph` is registered 1 ("Whether to show graphical ping"), so a
+match draws bars and no number. Ticking it writes text 1 and graph 0 — the number
+is drawn only where the graph is not — and unticking restores both of the engine's
+own values. It is off by default because it changes how the scoreboard reads. It
+also sits alone in the card's third column, which the shortened names made room
+for, and that is what took the card back to three rows.
+
 | switch | cvar | writes | read from |
 |--------|------|--------|-----------|
-| Mute the music | `snd_enableStream` | `0` | 3 places |
-| Fullbright world | `r_fullbright` | `1` | 6 places |
-| Hide the HUD | `cg_draw2D` | `0` | 3 places |
-| Hide the weapon model | `cg_drawGun` | `0` | 4 places |
-| Disable the fog | `r_fog` | `0` | 1 place |
+| Disable Music | `snd_enableStream` | `0` | 3 places |
+| Fullbright | `r_fullbright` | `1` | 6 places |
+| Hide HUD | `cg_draw2D` | `0` | 3 places |
+| Hide Weapon model | `cg_drawGun` | `0` | 4 places |
+| Disable Fog | `r_fog` | `0` | 1 place |
 | Enable the film tweak | `r_filmUseTweaks` + `r_filmTweakEnable` | `1` + `1` | 1 place each |
 
 They go through the same watchdog as everything else, because the game reloads
@@ -453,7 +532,7 @@ rva 0x2129E  mov [rbx + 0x220], cl             ; the flag, copied per frame
 
 So with `r_filmUseTweaks 0`, `r_filmTweakEnable` is read by nothing at all: it is
 the outer gate that decides whether the inner one is looked at. The switch writes
-both, and the six sliders underneath are written too — they start at the values
+both, and the three grade sliders underneath are written too — they start at the values
 the game itself registers, so a slider left alone changes nothing, and one that is
 moved does.
 
@@ -494,6 +573,8 @@ tools/disasm.py         Disassemble an RVA with its operands resolved, follow a 
                         pointer (--xref, --dvar, --function, --static, --qwords)
 tools/deadcvar.ps1      Is a cvar read by this build at all?
 tools/xref.ps1          Code references to an address, in raw bytes
+tools/callers.py        Call/jmp targets of an address: the references xref cannot see,
+                        because a function is reached by `call rel32` and not by a pointer
 tools/dumpatrva.ps1     Bytes at an RVA, plus the section table
 tools/findstrings.ps1   Strings in a binary
 tools/smokegui.ps1      Drive the control window from outside: -ClickApply for the

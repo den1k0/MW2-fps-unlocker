@@ -50,14 +50,16 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
                      gates (r_filmUseTweaks and r_filmTweakEnable) and the game
                      ships both off, so this writes 1 to each
 
-    [r_filmTweakContrast]     enabled=0  the grade's six parameters, each with a
-    [r_filmTweakBrightness]   enabled=0  slider in the window. The game registers
-    [r_filmTweakDesaturation] enabled=0  them at 1.4, 0, 0.2 and 1.1, 0.9, 0.7
-    [r_filmTweakLightTint]    enabled=0  - the last three are the tints. A tint
-    [r_filmTweakMediumTint]   enabled=0  is a *colour* cvar (red, green and blue),
-    [r_filmTweakDarkTint]     enabled=0  so the same number goes into all three
-                                         components: a grey tint, like the game's
-                                         own
+    [r_filmTweakContrast]     enabled=0  the grade's six parameters. The first
+    [r_filmTweakBrightness]   enabled=0  three have sliders in the window; the game
+    [r_filmTweakDesaturation] enabled=0  registers them at 1.4, 0, 0.2 and 1.1,
+    [r_filmTweakLightTint]    enabled=0  0.9, 0.7. The last three are the tints, and
+    [r_filmTweakMediumTint]   enabled=0  they are file-only now - they had sliders
+    [r_filmTweakDarkTint]     enabled=0  until the card was compacted, and moving
+                                         them changed very little. A tint is a
+                                         *colour* cvar (red, green and blue), so the
+                                         same number goes into all three components:
+                                         a grey tint, like the game's own
 
     [r_glow_allowed]          enabled=0  the bloom's four gates. The window's one
     [r_glow]                  enabled=0  "Tweak the glow" switch writes 1 to all
@@ -124,27 +126,118 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
                                               crosshair" switch writes that 0:
                                               enabled=1 here means hidden
 
+    [cg_scoreboardPingText]        enabled=0  the scoreboard's ping number, an int
+    [cg_scoreboardPingGraph]       enabled=0  registered at 0, and the ping bars,
+                                              an int registered at 1 and read as a
+                                              gate over their drawing block. The
+                                              window's "Numeric Ping" switch writes
+                                              BOTH, because the number is drawn only
+                                              where the graph is not: text 1 and
+                                              graph 0 for on, and off puts the
+                                              engine's own pair back
+
     [timescale]                    enabled=0  the game's own clock, a float
                                               registered at 1.0. Below 1.0 slows
                                               the game down, above it speeds
                                               everything up; 1.0 is neutral. This
                                               and the gravity below share ONE
-                                              switch in the window - the "Server"
+                                              switch in the window - the "Debug"
                                               card's - and the same flag goes into
                                               both sections: with it off the cvars
                                               are handed back to the game. Slider:
-                                              0.10 to 5.00. TESTING
+                                              0.50 to 5.00 - and that floor is
+                                              measured, not the engine's: the
+                                              registration passes 0.001 and nothing
+                                              clamps it, but below about 0.5 the
+                                              game's own time sync fights the
+                                              slowdown and rubberbands. TESTING
 
     [phys_gravity]                 enabled=0  "Physics gravity in units/sec^2."
                                               - the gravity on objects, a float
                                               registered at 800, which is neutral;
                                               negative inverts it. Not g_gravity,
                                               which the multiplayer binary does not
-                                              have. Shares the Server card's switch
+                                              have. Shares the Debug card's switch
                                               with the timescale, and the slider
                                               starts at -800: the same size as the
                                               engine's own with the sign flipped
                                               (range -2000 to 2000). TESTING
+
+    [camera_thirdPerson]
+    enabled=0        "Use third person view globally", read by code as a gate in
+                     four places. The window's "Third person view" switch, in
+                     Other Settings, writes 1 while it is ticked and hands the
+                     engine's own value back when it is not. TESTING
+
+    [bg_forceDualWield]
+    enabled=0        "Force akimbo for all possible weapons", an int registered at
+                     0 and read in three places, all of them weapon set-up rather
+                     than the frame loop. NOT in the window any more: the "Force
+                     dual wield" switch was tried in a match and moved nothing, so
+                     the control is gone and this section is file-only - a value
+                     set here is still written. The spelling matters: the unlocker
+                     finds a dvar by its exact name string, and this file's
+                     spelling has the capital W
+
+    [player_sprintSpeedScale]
+    enabled=1        "The scale applied to the player speed when sprinting", a
+    value=1.5        float registered at 1.5 between 0 and 2.0, read twice as a
+                     multiplier on a value already on its way into the movement
+                     code. Gateless, like [r_blur]: always on, only the value
+                     moves. The window's "Sprint speed" slider is on the last row
+                     of the "Debug" card at the foot of the window, and it covers
+                     the registration's whole 0.00 to 2.00 - note that 1.00, which
+                     reads like "normal", is two thirds of the speed the game
+                     ships
+
+    [mp_paused]
+    enabled=0        "If true ignore server time advancing. Handy for taking
+                     hi-resolution screenshots without the world moving", an int
+                     registered at 0 in the multiplayer binary only, cached at
+                     0x5AF6C8 and read once. The window's "MP paused" switch, beside
+                     the sprint scale on the Debug card's last row, writes 1 while
+                     it is ticked and hands the engine's own 0 back when it is not
+
+    [r_znear]
+    enabled=1        "Things closer than this aren't drawn. Reducing this increases
+    value=4          the depth precision" - the near clip plane. Read once, in the
+                     view setup that also reads r_subwindow, and floored there at
+                     0.01, so a box at 0.00 behaves as 0.01. The engine's own limits
+                     are 0.001 to 10000, so 0.00-999.00 sits inside them. A large
+                     value clips the world; the viewmodel's own near is separate and
+                     is r_znear_depthhack. The window's "Z near" box is the second
+                     row of the "Debug" card, beside blur, and it starts at 4.00, the
+                     engine's own value. TESTING
+
+    [r_filmTweakInvert]  enabled=0  "Tweak dev var; enable inverted video", an int
+                                    registered at 0 and read once: it flips the
+                                    grade's colour, so it only shows while the film
+                                    tweak is on. The window's "Invert the grade"
+                                    switch - the row under the film tweak card's two
+                                    columns of sliders - writes 1 and hands 0 back
+                                    when unticked. TESTING
+
+    [cg_footsteps]       enabled=0  "Play footstep sounds", an int registered at 1
+                                    and read as a gate in four places. NOT in the
+                                    window any more: the "Mute Footsteps" switch was
+                                    tried and taken back out. The section is
+                                    file-only, and the value written is 0, which
+                                    makes it silent - the inverted kind, like
+                                    [cg_drawCrosshair]. TESTING
+
+    [ui_debugMode]       enabled=0  "Draw ui debug info on the screen", an int
+                                    registered at 0 and read as a gate five times
+                                    in multiplayer and five in single player. NOT in
+                                    the window any more: the "UI debug" switch was
+                                    tried and taken back out, so the section is
+                                    file-only now. TESTING
+
+    (two sections that used to sit between those two are gone. [subwindow_left] and
+     its three siblings were the four components of r_subwindow - the rectangle the
+     frame is drawn into - and [r_debugShader] was the shader-debug mode. Both
+     worked, both were tried in a match, and both were dropped: a frame you can
+     shrink and a view of the shaders' basis vectors are developer's tools rather
+     than settings to play with.)
 
     [sensitivity]
     enabled=0        mouse sensitivity. NOT in the window any more: writing the
@@ -160,41 +253,71 @@ Editing that file in Notepad is just as valid - same settings, no sliders:
     [netfps]
     enabled=0        the network fps counter - multiplayer, and not your fps
 
-    [general] toggleKey=0x75    the in-game key: F1-F12, 0x75 is F6
+    [general] toggleKey=0x75    toggles every patch on and off in game: F1-F12,
+                                0x75 is F6
+    [general] nextProfileKey=0x77
+                                asks for the next profile: the window loads the
+                                next slot and applies it, so a match can switch
+                                profiles from the keyboard. 0x77 is F8. BOTH keys
+                                are global - they live in [general], not in a
+                                profile, so switching profile cannot move them.
+                                The window's two key boxes set them.
 
 The strip along the top carries the profile box: a dropdown of three slots, kept as
 Profile 1.ini to Profile 3.ini in %LOCALAPPDATA%\MW2Unlocker\profiles. Choosing one
 puts its settings back into the window - then press Apply & save, because choosing
 one on its own changes nothing in the game. Apply & save is also what stores what
 the window shows into the slot you are on, starting that file as a copy of your
-config the first time. The window opens on Profile 1 and loads it if it exists, so
+config the first time. "Next profile" is a hotkey - its box sits beside the toggle
+key's in Other Settings - that does both halves in one press: it moves to the next
+slot, loads it and applies it, so a match can be switched between profiles from the
+keyboard (it wraps 1, 2, 3, 1). The key is polled inside the game by the DLL, which
+posts a message to the window; the window owns the profile files, so it is the one
+that loads and applies. Both hotkeys are global: they live in [general], so no
+profile can move them.
+The window opens on Profile 1 and loads it if it exists, so
 that is the slot to keep your everyday settings in.
 
-The window groups music, fullbright, the HUD, the crosshair, the weapon model and
-the fog - along with the in-game hotkey and "close with the game" beside it - into
-one card called "Other Settings"; below that, the two testing sliders (the timescale
-and the physics gravity) have a "Server" card of their own, behind a single switch
-that gates both of them. The film tweak has a card of its own, laid out in two
-columns - its own six sliders on the left, the glow tweak's switch and four sliders
-plus the blur slider on the right - and the viewmodel card has the three offsets on
+The window groups music, fullbright, the HUD, the crosshair, the weapon model, the
+fog, the numeric ping and the third-person camera -
+along with the two hotkeys, side
+by side, and
+"Close with Game" as the last switch of the grid, into
+one card called "Other Settings", in three columns; below that card, the two
+testing sliders (the timescale and the prop
+gravity, named for what it moves - objects, not the player) have a "Debug" card of
+their own, behind a single switch
+that gates them, and, on a second row beside each other, the blur slider and the
+near clip plane box, and on a third row the sprint speed scale's slider with the
+"MP paused" switch beside it - the card
+was called "Server" until the one-row "Debug" card underneath it went and the near
+plane moved in here. The film tweak has a card of its own,
+laid out in two
+columns - its own three grade sliders on the left, the glow tweak's switch and four
+on the right, and the "Invert the grade" switch under both - and the viewmodel card
+has the three offsets on
 the left and the HUD safe area's two sliders with the compass under them on the
 right, each column with its own switch.
 
-Three of those cards fold away: the viewmodel, the film tweak and the Server one.
+Three of those cards fold away: the viewmodel, the film tweak and the Debug one.
 The rows do nothing while their switch is off, so they are hidden and the window
 shrinks to fit - tick a switch and its rows appear right below it, untick it and
 they go again. The viewmodel and film cards stay open while either of their switches
-is on; the Server card has the one, so it is simply open or shut, and it starts
+is on; the Debug card has the one, so it is simply open or shut, and it starts
 folded. That switch is a real gate rather than only a disclosure: with it off the
-unlocker hands the timescale and the physics gravity back to the game. The switch
+unlocker hands the timescale and the prop gravity back to the game. Blur and the
+near plane have no gate at all, so they are written whether the card is open or
+folded - folding it only puts their controls out of reach. The switch
 itself does not move, and the little triangle next to it points right while its rows
 are closed and down once they are open.
 
-The line at the very top of the window is worth reading once: some of these
-settings are only picked up when a match is set up, so they do nothing until you
-rejoin one. The safe area, the compass and the HUD switches are the ones that
-behave that way; the frame cap, the field of view, the viewmodel and the film
-tweak apply as soon as they are written.
+The line at the very top of the window is worth reading once: it names the yellow
+that marks the settings which are only picked up when a match is set up, so they do
+nothing until you rejoin one - and the word itself is drawn in that yellow, because
+the note paints its own text. Four rows are drawn in it - the music and fullbright
+switches, and the safe area's "Horiz. adj." and "Vert. adj." labels - while the
+frame cap, the field of view, the viewmodel and the film tweak apply as soon as they
+are written.
 
 The small dot beside the status line at the foot of the window says what the
 unlocker is doing at a glance: green once the game is answering, yellow while it
